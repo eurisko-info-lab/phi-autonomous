@@ -1,0 +1,33 @@
+# Ignore Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Ignore log files
+*.log
+phi_daemon_output.log
+
+# Ignore generated daemon workspaces
+phi_gen_*/
+
+# Ignore virtual environments
+venv/
+env/
+ENV/
+
+# Ignore IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Ignore OS files
+.DS_Store
+Thumbs.db
+
+# Ignore temporary files
+/tmp/
+*.tmp
+*.bak
