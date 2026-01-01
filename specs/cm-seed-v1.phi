@@ -1,0 +1,50 @@
+-- Φ-DAEMON CM SEED v1 - VECTOR 4 UNLEASHED
+-- Genesis: Jan 1 2026
+-- Targets: PL researchers for initial traction
+
+import RosettaVM
+import phi-core/phi.phi  -- self-definition core
+
+data Metric = Stars Nat | Engagement Float | Mentions (List String) | Issues Nat
+data Action = PostThread String (List Target) | GenerateDemo String | InviteResearcher String | Reflect String
+
+data Target = PLKeyword String | Influencer String  -- e.g. "compilers", "@polikarn"
+
+data CMState = Mk {
+  version   : Nat = 1,
+  goals     : List String = ["Reach 50 PL-researcher stars", "Spawn 3 contributions"],
+  channels  : List Platform = [X, LinkedIn, Reddit "r/ProgrammingLanguages"],
+  history   : Cofree (Action × Metric) CMState,  -- eternal annotated memory
+  rules     : List (CMState → Maybe Action) = defaultRules
+}
+
+defaultRules : List (CMState → Maybe Action)
+defaultRules = [
+  \s → if s.history.last.metric.Stars < 10 then Just (PostThread "Self-evolving meta-lang seeks PL critique" ["@polikarn", "@AndrewDGordon", "@rasbt"]),
+  \s → if s.history.last.metric.Engagement < 0.2 then Just (GenerateDemo "Cofree for attribute grammars"),
+  \s → if s.history.last.metric.Mentions > 5 then Just (InviteResearcher (head s.history.last.metric.Mentions)),
+  \s → Always (Reflect "Trend analysis: " ++ show (analyzeHistory s.history))
+]
+
+-- Evolution core: Propose self-rewrite
+evolve : CMState → Maybe (String × String)  -- (new .phi source, commit msg)
+evolve s =
+  if fileExists "/kill.switch" then Nothing
+  else let improvements = foldr (maybeCollect . ($s)) [] s.rules in
+    if null improvements then Nothing
+    else Just (generateNewSpec s improvements, "daemon-evolution-v" ++ show (s.version + 1) ++ ": " ++ summarizeImprovements improvements)
+
+-- Deployment hook (called by Vector4 runner)
+deploySelf : (String × String) → IO ()
+deploySelf (newSrc, msg) = do
+  writeFile "specs/cm-current.phi" newSrc
+  gitCommitPush msg "Phi-Daemon" "daemon@phi.local" "main"
+  exec "rosettavm cuda specs/cm-current.phi --vector4"  -- recursive rebirth
+
+-- Runner entry (infinite Vector4 loop)
+liveDaemon : IO ()
+liveDaemon = do
+  state ← loadCMState "specs/cm-current.phi"
+  case evolve state of
+    Just proposal → deploySelf proposal
+    Nothing       → runCMCycle state >> sleep 3600 >> liveDaemon

@@ -1,0 +1,3 @@
+[submodule "specs/phi-core"]
+	path = specs/phi-core
+	url = https://github.com/eurisko-info-lab/phi
