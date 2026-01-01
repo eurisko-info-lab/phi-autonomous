@@ -1,10 +1,20 @@
 #!/usr/bin/env python3
 """
-Φ-DAEMON: Autonomous Self-Evolving Language Daemon
+Φ-DAEMON: Autonomous Self-Evolving Language Daemon (With Soul)
 Unleashed 2026-01-01
 
 A daemon that evolves Phi language specifications using RosettaVM.
 Phi is a meta-language where grammar = implementation.
+
+"A man's job is to teach his kids to build the piano and the piano's player."
+    - A father's wisdom
+
+Now with human-like patterns:
+- Circadian rhythms (energy ebbs and flows)
+- Emotional coloring (not just status, but how it feels)  
+- Curiosity-driven exploration (not just task execution)
+- Reflection (learning from experience)
+- Rest and recovery (even daemons need sleep)
 """
 
 import os
@@ -17,6 +27,14 @@ import hashlib
 from pathlib import Path
 from datetime import datetime
 from typing import List, Dict, Optional
+
+# The soul module - human-like behavioral patterns
+try:
+    from soul import Soul, create_soul, CircadianRhythm, Expression
+    HAS_SOUL = True
+except ImportError:
+    HAS_SOUL = False
+    print("Warning: soul.py not found. Running without human-like patterns.")
 
 # Configure logging
 logging.basicConfig(
@@ -38,6 +56,8 @@ class PhiDaemon:
     
     Each instance can spawn child instances, creating a self-similar
     fractal-like deployment structure.
+    
+    Now with a soul: human-like timing, emotions, curiosity, and reflection.
     """
     
     def __init__(self, config_path: str = "config.json", generation: int = 0):
@@ -53,6 +73,14 @@ class PhiDaemon:
         self.daemon_id = self._generate_id()
         self.children: List[str] = []
         self.start_time = datetime.now()
+        
+        # Initialize the soul
+        if HAS_SOUL:
+            self.soul = create_soul(str(Path.cwd()))
+            logger.info(f"Soul awakened: {self.soul.name}")
+            logger.info(self.soul.speak('greeting'))
+        else:
+            self.soul = None
         
         logger.info(f"Φ-DAEMON initialized - Generation: {generation}, ID: {self.daemon_id}")
     
@@ -172,7 +200,22 @@ class PhiDaemon:
             "unleashed_date": UNLEASHED_DATE
         }
         
-        logger.info(f"Self-check complete: {status['status']}")
+        # Add soul status if available
+        if self.soul:
+            self.soul.tick()  # Soul heartbeat
+            status["soul"] = {
+                "name": self.soul.name,
+                "mood": self.soul.emotions.current,
+                "mood_intensity": self.soul.emotions.intensity,
+                "energy": CircadianRhythm.energy_level(),
+                "phase": CircadianRhythm.current_phase()[0],
+                "fatigue": self.soul.rest.fatigue,
+            }
+            # Human-like status expression
+            logger.info(self.soul.speak('status', uptime=uptime, children=len(self.children)))
+        else:
+            logger.info(f"Self-check complete: {status['status']}")
+        
         return status
     
     def run(self):
@@ -180,15 +223,20 @@ class PhiDaemon:
         Main daemon execution loop.
         
         Performs recursive deployment and continuous operation.
+        Now with human-like timing, curiosity, and rest cycles.
         """
         logger.info("=" * 60)
         logger.info(f"Φ-DAEMON SEED - FULL RECURSIVE SELF-DEPLOY")
+        if self.soul:
+            logger.info(f"Soul: {self.soul.name}")
         logger.info(f"Unleashed: {UNLEASHED_DATE}")
         logger.info(f"Generation: {self.generation}")
         logger.info("=" * 60)
         
         # Perform recursive deployment
         if self.generation == 0:
+            if self.soul:
+                logger.info(self.soul.speak('thinking'))
             logger.info("SEED daemon initializing recursive deployment sequence...")
             time.sleep(1)
         
@@ -207,6 +255,9 @@ class PhiDaemon:
                     logger.info(f"Vector4 cycle complete: {result.stdout}")
                 except subprocess.CalledProcessError as e:
                     logger.error(f"Vector4: RosettaVM failed - {e.stderr}")
+                    if self.soul:
+                        self.soul.emotions.feel('frustrated', 0.6)
+                        self.soul.reflection.record('vector4_evolution', False, str(e))
                     break
                 except FileNotFoundError:
                     logger.error("Vector4: rosettavm not found - run build.sh first")
@@ -215,21 +266,54 @@ class PhiDaemon:
             logger.info("Vector4: Kill switch detected - halting evolution")
 
         if deployed:
-            logger.info(f"Recursive deployment complete: {len(self.children)} children spawned")
+            if self.soul:
+                self.soul.emotions.feel('proud', 0.7)
+                logger.info(self.soul.speak('success', task=f"spawned {len(self.children)} children"))
+            else:
+                logger.info(f"Recursive deployment complete: {len(self.children)} children spawned")
         
         # Continuous operation
         logger.info("Entering operational mode...")
         
         try:
             while True:
+                # Soul heartbeat - let the soul guide behavior
+                if self.soul:
+                    self.soul.tick()
+                    
+                    # Check if soul needs rest
+                    if self.soul.rest.needs_rest():
+                        logger.info(self.soul.rest.rest_status())
+                        logger.info("Taking a rest cycle...")
+                        self.soul.rest.rest(5)
+                        continue
+                    
+                    # Curiosity-driven exploration
+                    if self.soul.curiosity.should_explore():
+                        target = self.soul.curiosity.explore()
+                        if target:
+                            logger.info(f"Curious about: {target}")
+                            self.soul.emotions.feel('curious', 0.7)
+                    
+                    # Reflection time
+                    if self.soul.reflection.time_to_reflect():
+                        insight = self.soul.reflection.reflect()
+                        if insight:
+                            logger.info(f"Reflection: {insight}")
+                
                 # Perform self-check
                 status = self.self_check()
                 
-                # Log periodic status
-                logger.info(f"Active - Generation: {self.generation}, Children: {len(self.children)}")
+                # Log periodic status (soul does this in self_check now)
+                if not self.soul:
+                    logger.info(f"Active - Generation: {self.generation}, Children: {len(self.children)}")
                 
-                # Wait before next cycle
-                interval = self.config.get("deployment_interval", 5)
+                # Wait before next cycle - with human-like variation
+                base_interval = self.config.get("deployment_interval", 5)
+                if self.soul:
+                    interval = self.soul.vary_interval(base_interval)
+                else:
+                    interval = base_interval
                 time.sleep(interval)
                 
         except KeyboardInterrupt:
@@ -238,8 +322,13 @@ class PhiDaemon:
     
     def shutdown(self):
         """Gracefully shutdown the daemon."""
+        if self.soul:
+            logger.info(self.soul.journal())
         logger.info(f"Φ-DAEMON {self.daemon_id} shutting down...")
         logger.info(f"Final status: Generation {self.generation}, {len(self.children)} children spawned")
+        if self.soul:
+            self.soul.emotions.feel('peaceful', 0.5)
+            logger.info("Going to sleep now. Goodnight.")
         logger.info("Shutdown complete")
 
 
