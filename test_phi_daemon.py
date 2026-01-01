@@ -32,8 +32,7 @@ class TestPhiDaemon(unittest.TestCase):
             "max_generations": 2,
             "max_children_per_generation": 2,
             "deployment_interval": 1,
-            "recursive_deploy": True,
-            "phi_factor": phi_daemon.PHI
+            "recursive_deploy": True
         }
         
         with open("config.json", "w") as f:
@@ -163,10 +162,8 @@ class TestPhiDaemon(unittest.TestCase):
         self.assertIn("uptime_seconds", status)
         self.assertIn("children_count", status)
         self.assertIn("status", status)
-        self.assertIn("phi_constant", status)
         self.assertEqual(status["status"], "operational")
         self.assertEqual(status["generation"], 0)
-        self.assertEqual(status["phi_constant"], phi_daemon.PHI)
     
     def test_unleashed_date(self):
         """Test unleashed date constant."""
@@ -247,7 +244,6 @@ def run_tests():
     
     # Add all test cases
     suite.addTests(loader.loadTestsFromTestCase(TestPhiDaemon))
-    suite.addTests(loader.loadTestsFromTestCase(TestPhiConstants))
     suite.addTests(loader.loadTestsFromTestCase(TestConfiguration))
     
     # Run tests

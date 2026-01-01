@@ -325,11 +325,11 @@ This project is released into the public domain. See LICENSE file for details.
 Φ-DAEMON embodies the principles of:
 - **Autonomy**: Self-managing and self-deploying
 - **Recursion**: Self-similar structure at all scales
-- **Harmony**: Φ-based balance in growth
+- **Meta-programming**: Specs that define themselves
 - **Simplicity**: Minimal dependencies, clear code
 
 ---
 
 **Unleashed: 2026-01-01**
 
-*"As above, so below; as within, so without" - The recursive nature of Φ*
+*"The spec IS the implementation" — The recursive nature of Φ*

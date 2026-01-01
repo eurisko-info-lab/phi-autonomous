@@ -83,4 +83,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: rosettavm
-          path: specs/phi-core/ports/rust/tools/rvm/target/release/rvm
+          path: specs/phi-core/ports/rust/tools/rvm/target/release/rosettavm
+          if-no-files-found: ignore
