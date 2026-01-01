@@ -227,6 +227,11 @@ Extend `self_check()` to include:
 - Performance monitoring
 - External health endpoints
 
+## Vector4 Extension
+- Recursive self-evolution loop for CM seed.
+- Integrates RosettaVM (built from phi-core submodule).
+- Evolution process: Load state → Evolve rules → Deploy new version via git.
+
 ## Implementation Philosophy
 
 Φ-DAEMON embodies principles of:
