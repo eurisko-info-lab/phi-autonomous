@@ -81,6 +81,13 @@ case "$DEPLOY_MODE" in
         fi
         ;;
     
+    vector4)
+        echo ""
+        echo "Starting Φ-DAEMON in Vector4 mode (CM evolution)..."
+        ./build.sh  # Build RosettaVM first
+        python3 "$SCRIPT_DIR/phi_daemon.py" 0
+        ;;
+
     *)
         echo ""
         echo "Usage: $0 [foreground|background|status|stop]"
@@ -89,6 +96,7 @@ case "$DEPLOY_MODE" in
         echo "  background - Run daemon in background"
         echo "  status     - Check daemon status"
         echo "  stop       - Stop running daemon"
+        echo "  vector4    - Run with Vector4 CM evolution
         exit 1
         ;;
 esac
