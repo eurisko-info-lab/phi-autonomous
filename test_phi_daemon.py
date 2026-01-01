@@ -87,12 +87,8 @@ class TestPhiDaemon(unittest.TestCase):
         self.assertEqual(daemon_gen1.generation, 1)
         self.assertEqual(daemon_gen2.generation, 2)
     
-    def test_phi_constant(self):
-        """Test PHI constant is correctly defined."""
-        self.assertAlmostEqual(phi_daemon.PHI, 1.618033988749895, places=10)
-    
     def test_calculate_next_generation_count(self):
-        """Test child count calculation using PHI."""
+        """Test child count calculation based on generation."""
         daemon_gen0 = phi_daemon.PhiDaemon(generation=0)
         daemon_gen1 = phi_daemon.PhiDaemon(generation=1)
         
@@ -197,20 +193,6 @@ class TestPhiDaemon(unittest.TestCase):
             expected_dir = f"phi_gen_1_{i}"
             if i < daemon.config["max_children_per_generation"]:
                 self.assertTrue(os.path.exists(expected_dir))
-
-
-class TestPhiConstants(unittest.TestCase):
-    """Test mathematical constants."""
-    
-    def test_phi_value(self):
-        """Test PHI has correct value."""
-        expected_phi = (1 + 5**0.5) / 2
-        self.assertAlmostEqual(phi_daemon.PHI, expected_phi, places=10)
-    
-    def test_phi_golden_ratio_property(self):
-        """Test PHI satisfies golden ratio property: PHI = 1 + 1/PHI."""
-        phi = phi_daemon.PHI
-        self.assertAlmostEqual(phi, 1 + 1/phi, places=10)
 
 
 class TestConfiguration(unittest.TestCase):

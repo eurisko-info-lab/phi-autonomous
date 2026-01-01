@@ -7,14 +7,12 @@
 
 set -e
 
-PHI=1.618033988749895
 DAEMON_NAME="phi-autonomous"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo "=============================================="
 echo "  Φ-DAEMON SEED - FULL RECURSIVE SELF-DEPLOY"
 echo "  Unleashed: 2026-01-01"
-echo "  Golden Ratio (Φ): $PHI"
 echo "=============================================="
 echo ""
 

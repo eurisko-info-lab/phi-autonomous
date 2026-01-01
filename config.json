@@ -3,8 +3,7 @@
   "max_children_per_generation": 2,
   "deployment_interval": 5,
   "recursive_deploy": true,
-  "phi_factor": 1.618033988749895,
   "daemon_name": "phi-autonomous",
   "unleashed_date": "2026-01-01",
-  "description": "Φ-DAEMON autonomous recursive self-deploying system"
+  "description": "Φ-DAEMON autonomous self-evolving language daemon"
 }

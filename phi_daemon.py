@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-Φ-DAEMON: Autonomous Recursive Self-Deploying Daemon
+Φ-DAEMON: Autonomous Self-Evolving Language Daemon
 Unleashed 2026-01-01
 
-A self-aware daemon that can recursively deploy and manage instances of itself.
-Inspired by the golden ratio (Φ), representing self-similarity and infinite recursion.
+A daemon that evolves Phi language specifications using RosettaVM.
+Phi is a meta-language where grammar = implementation.
 """
 
 import os
@@ -29,7 +29,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-PHI = 1.618033988749895  # The Golden Ratio
 UNLEASHED_DATE = "2026-01-01"
 
 
@@ -64,8 +63,7 @@ class PhiDaemon:
             "max_generations": 3,
             "max_children_per_generation": 2,
             "deployment_interval": 5,
-            "recursive_deploy": True,
-            "phi_factor": PHI
+            "recursive_deploy": True
         }
         
         try:
@@ -86,14 +84,14 @@ class PhiDaemon:
     
     def _calculate_next_generation_count(self) -> int:
         """
-        Calculate number of children to spawn using PHI-based distribution.
+        Calculate number of children to spawn based on generation.
         
-        Uses golden ratio to determine optimal spawn count.
+        Earlier generations spawn more, later generations spawn fewer.
         """
         max_children = self.config.get("max_children_per_generation", 2)
-        # Apply PHI factor for organic growth pattern
-        phi_adjusted = int(max_children / (self.generation + 1) * PHI)
-        return max(1, min(phi_adjusted, max_children))
+        # Decrease children as generations increase
+        adjusted = int(max_children / (self.generation + 1))
+        return max(1, min(adjusted, max_children))
     
     def recursive_deploy(self) -> bool:
         """
@@ -170,7 +168,6 @@ class PhiDaemon:
             "children_count": len(self.children),
             "children_ids": self.children,
             "config": self.config,
-            "phi_constant": PHI,
             "status": "operational",
             "unleashed_date": UNLEASHED_DATE
         }
@@ -188,7 +185,6 @@ class PhiDaemon:
         logger.info(f"Φ-DAEMON SEED - FULL RECURSIVE SELF-DEPLOY")
         logger.info(f"Unleashed: {UNLEASHED_DATE}")
         logger.info(f"Generation: {self.generation}")
-        logger.info(f"Golden Ratio (Φ): {PHI}")
         logger.info("=" * 60)
         
         # Perform recursive deployment

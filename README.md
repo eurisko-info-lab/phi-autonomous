@@ -149,8 +149,8 @@ Gracefully stop all running daemon instances.
 ### 🔄 Recursive Self-Deployment
 Each daemon instance can spawn child instances up to a configurable generation depth, creating a self-similar fractal structure.
 
-### 📐 Golden Ratio (Φ) Based Growth
-Uses the golden ratio to determine optimal spawn rates, creating balanced and harmonious system growth.
+### 🧬 Phi Meta-Language Evolution
+Evolves Phi specs via RosettaVM — one spec gives you parser, typechecker, evaluator, compiler. All derived from `Cofree[F, A]`.
 
 ### 🎯 Generational Hierarchy
 Tracks parent-child relationships across multiple generations with unique IDs for each instance.
@@ -173,8 +173,7 @@ Edit `config.json` to customize daemon behavior:
   "max_generations": 3,
   "max_children_per_generation": 2,
   "deployment_interval": 5,
-  "recursive_deploy": true,
-  "phi_factor": 1.618033988749895
+  "recursive_deploy": true
 }
 ```
 
@@ -184,7 +183,6 @@ Edit `config.json` to customize daemon behavior:
 - **max_children_per_generation**: Maximum children each instance can spawn (default: 2)
 - **deployment_interval**: Seconds between operational cycles (default: 5)
 - **recursive_deploy**: Enable/disable recursive spawning (default: true)
-- **phi_factor**: The golden ratio constant (default: 1.618033988749895)
 
 ## Architecture
 
@@ -211,16 +209,16 @@ Generation 0 (SEED)
 ```
 
 1. **Seed Initialization**: Generation 0 daemon starts and loads configuration
-2. **Recursive Spawning**: Calculates optimal children count using Φ-based algorithm
+2. **Recursive Spawning**: Calculates optimal children count based on generation
 3. **Child Creation**: Spawns children with incremented generation number
 4. **Continuous Operation**: Each instance operates independently, monitoring health
 5. **Graceful Shutdown**: Handles termination signals and cleanup
 
-### Φ-Based Growth Algorithm
+### Growth Algorithm
 
 The number of children spawned is calculated using:
 ```
-children_count = floor(max_children / (generation + 1) * Φ)
+children_count = floor(max_children / (generation + 1))
 ```
 
 This ensures earlier generations spawn more children while later generations spawn fewer, creating a naturally balanced hierarchy.
@@ -232,7 +230,6 @@ This ensures earlier generations spawn more children while later generations spa
 Φ-DAEMON SEED - FULL RECURSIVE SELF-DEPLOY
 Unleashed: 2026-01-01
 Generation: 0
-Golden Ratio (Φ): 1.618033988749895
 ==========================================================
 
 2026-01-01 00:00:00 - Φ-DAEMON [INFO] - Φ-DAEMON initialized - Generation: 0, ID: abc123def456

@@ -5,15 +5,26 @@
 
 ## Overview
 
-Φ-DAEMON (Phi-Daemon) is an autonomous, self-replicating daemon system inspired by the golden ratio (Φ ≈ 1.618). The system implements a recursive self-deployment architecture where each daemon instance can spawn child instances, creating a fractal-like, self-similar deployment structure.
+Φ-DAEMON (Phi-Daemon) is an autonomous daemon system that evolves Phi language specifications. **Phi** is a meta-language where grammar = implementation — one spec gives you parser, typechecker, evaluator, and compiler. The daemon runs these specs through RosettaVM (with CUDA support) to evolve community management rules autonomously.
 
 ## Core Concepts
 
-### The Golden Ratio (Φ)
-The golden ratio (phi) represents self-similarity and infinite recursion in nature. Φ-DAEMON uses this constant to:
-- Determine optimal spawn rates for child processes
-- Create balanced, organic growth patterns
-- Maintain system stability through proportional scaling
+### What is Phi?
+Phi is a language for defining languages:
+
+```phi
+Expr = Num Int | Add Expr Expr
+eval (Num n) = n
+eval (Add a b) = eval a + eval b
+```
+
+That's a complete language. Parser derived from constructors. Evaluator from equations. No separate implementations.
+
+**The math:** Everything is `Cofree[F, A]` — trees where every node carries an annotation:
+- Parser: annotate with source positions
+- Typechecker: annotate with types
+- Evaluator: annotate with values
+- Compiler: annotate with target code
 
 ### Generational Hierarchy
 ```
@@ -45,7 +56,6 @@ JSON-based configuration controls:
 - `max_children_per_generation`: Children per instance (default: 2)
 - `deployment_interval`: Time between operations in seconds (default: 5)
 - `recursive_deploy`: Enable/disable self-replication (default: true)
-- `phi_factor`: The golden ratio constant
 
 ### 3. Deployment Mechanism
 The `deploy.sh` script provides multiple deployment modes:
@@ -64,7 +74,7 @@ The `deploy.sh` script provides multiple deployment modes:
 4. Enters operational state
 
 ### Phase 2: Recursive Spawning
-1. Calculate optimal child count using Φ-based algorithm
+1. Calculate optimal child count based on generation
 2. Create child workspaces
 3. Copy configuration to children
 4. Spawn child processes with next generation number
@@ -93,10 +103,10 @@ Each daemon instance knows:
 - Configuration state
 
 ### Fractal Growth Pattern
-Using the golden ratio, the system creates balanced growth:
+The system creates balanced growth:
 - Early generations spawn more children
 - Later generations spawn fewer children
-- Overall system maintains Φ-proportional structure
+- Overall system maintains proportional structure
 
 ### Resilience
 - Each instance operates independently
@@ -197,15 +207,15 @@ For production use requiring actual process spawning, extend the `_spawn_child()
 
 ## Mathematical Foundation
 
-The Φ-based growth algorithm:
+The growth algorithm:
 ```
-children_count = floor(max_children / (generation + 1) * Φ)
+children_count = floor(max_children / (generation + 1))
 ```
 
 This ensures:
 - Generation 0: Maximum children
-- Generation 1: Φ-scaled reduction
-- Generation 2+: Continued Φ-proportional decrease
+- Generation 1: Reduced count
+- Generation 2+: Continued proportional decrease
 
 ## Extension Points
 
@@ -237,7 +247,7 @@ Extend `self_check()` to include:
 Φ-DAEMON embodies principles of:
 - **Autonomy**: Self-managing and self-deploying
 - **Recursion**: Self-similar structure at all scales
-- **Harmony**: Φ-based balance in growth
+- **Meta-programming**: Uses Phi to evolve its own specs
 - **Simplicity**: Minimal dependencies, clear code
 - **Observability**: Comprehensive logging and status
 
@@ -256,4 +266,4 @@ Potential evolution directions:
 ---
 
 **Unleashed: 2026-01-01**
-*"As above, so below; as within, so without" - The recursive nature of Φ*
+*"The spec IS the implementation" — The recursive nature of Φ*
