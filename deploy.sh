@@ -96,7 +96,7 @@ case "$DEPLOY_MODE" in
         echo "  background - Run daemon in background"
         echo "  status     - Check daemon status"
         echo "  stop       - Stop running daemon"
-        echo "  vector4    - Run with Vector4 CM evolution
+        echo "  vector4    - Run with Vector4 CM evolution"
         exit 1
         ;;
 esac
