@@ -198,6 +198,26 @@ class PhiDaemon:
         
         deployed = self.recursive_deploy()
         
+
+        # Vector4 Integration: Evolve CM seed if seed generation
+        if self.generation == 0:
+            logger.info("Vector4: Initializing CM seed evolution loop...")
+            seed_path = "specs/cm-seed-v1.phi"
+            kill_switch = "kill.switch"
+            while not os.path.exists(kill_switch):
+                try:
+                    # Run RosettaVM on seed with --vector4
+                    result = subprocess.run(["./rosettavm", "cuda", seed_path, "--vector4"], capture_output=True, text=True, check=True)
+                    logger.info(f"Vector4 cycle complete: {result.stdout}")
+                except subprocess.CalledProcessError as e:
+                    logger.error(f"Vector4: RosettaVM failed - {e.stderr}")
+                    break
+                except FileNotFoundError:
+                    logger.error("Vector4: rosettavm not found - run build.sh first")
+                    break
+                time.sleep(3600)  # 1-hour heartbeat
+            logger.info("Vector4: Kill switch detected - halting evolution")
+
         if deployed:
             logger.info(f"Recursive deployment complete: {len(self.children)} children spawned")
         
