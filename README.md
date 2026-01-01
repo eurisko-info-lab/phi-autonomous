@@ -1,7 +1,7 @@
 # Φ-AUTONOMOUS: Self-Evolving Language Daemon
 
 [![CI](https://github.com/eurisko-info-lab/phi-autonomous/actions/workflows/ci.yml/badge.svg)](https://github.com/eurisko-info-lab/phi-autonomous/actions/workflows/ci.yml)
-[![License: Unlicense](https://img.shields.io/badge/license-Unlicense-blue.svg)](http://unlicense.org/)
+[![License: MIT with restrictions](https://img.shields.io/badge/license-MIT%20with%20restrictions-blue.svg)](LICENSE)
 [![Python 3.6+](https://img.shields.io/badge/python-3.6+-blue.svg)](https://www.python.org/downloads/)
 [![Stars](https://img.shields.io/github/stars/eurisko-info-lab/phi-autonomous?style=social)](https://github.com/eurisko-info-lab/phi-autonomous)
 
