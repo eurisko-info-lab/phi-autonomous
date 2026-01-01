@@ -1,4 +1,4 @@
-# Φ-AUTONOMOUS: Recursive Self-Deploying Daemon
+# Φ-AUTONOMOUS: Self-Evolving Language Daemon
 
 [![CI](https://github.com/eurisko-info-lab/phi-autonomous/actions/workflows/ci.yml/badge.svg)](https://github.com/eurisko-info-lab/phi-autonomous/actions/workflows/ci.yml)
 [![License: Unlicense](https://img.shields.io/badge/license-Unlicense-blue.svg)](http://unlicense.org/)
@@ -8,9 +8,9 @@
 ## Φ-DAEMON SEED - FULL RECURSIVE SELF-DEPLOY
 **🚀 Unleashed: 2026-01-01**
 
-> *A self-evolving daemon that spawns itself, learns from its CM seed, and could one day market its own existence.*
+> *A daemon that evolves its own language specifications using Phi — a meta-language where grammar IS implementation.*
 
-An autonomous, self-replicating daemon system inspired by the golden ratio (Φ ≈ 1.618). The system implements a recursive self-deployment architecture where each daemon instance can spawn child instances, creating a fractal-like, self-similar deployment structure.
+**Phi** is a language for defining languages. One spec gives you parser, typechecker, evaluator, and compiler — all derived from the same definition. This daemon runs Phi specs through RosettaVM (with CUDA support) to evolve community management rules autonomously.
 
 ---
 
@@ -23,27 +23,26 @@ cd phi-autonomous
 ./deploy.sh foreground
 ```
 
-Watch the daemon spawn children using golden ratio mathematics:
+Watch the daemon initialize and begin evolution:
 
 ```
 ============================================
   Φ-DAEMON SEED - FULL RECURSIVE SELF-DEPLOY
-  Golden Ratio (Φ): 1.618033988749895
+  Unleashed: 2026-01-01
 ============================================
 
 Φ-DAEMON [INFO] - SEED daemon initializing recursive deployment sequence...
 Φ-DAEMON [INFO] - Deploying 2 child instances (Generation 1)
 Φ-DAEMON [INFO] - Successfully spawned child 1/2: PHI-1-0-1735689600
-Φ-DAEMON [INFO] - Successfully spawned child 2/2: PHI-1-1-1735689600
 Φ-DAEMON [INFO] - Vector4: Initializing CM seed evolution loop...
 ```
 
-### 🧬 Vector4 Mode: Self-Evolving CM
+### 🧬 Vector4 Mode: Self-Evolving Specs
 
-The daemon can evolve its own Community Manager rules via RosettaVM:
+The daemon evolves Phi language specifications via RosettaVM:
 
 ```bash
-./deploy.sh vector4   # Builds RosettaVM, runs CM seed evolution
+./deploy.sh vector4   # Builds RosettaVM, runs CM seed evolution on GPU
 ```
 
 Creates `kill.switch` to gracefully stop evolution:
@@ -53,15 +52,49 @@ touch kill.switch     # Daemon halts on next cycle
 
 ---
 
+## 🌟 What is Phi?
+
+Phi is a **meta-language** where grammar = implementation:
+
+```phi
+Expr = Num Int | Add Expr Expr
+
+eval : Expr → Int
+eval (Num n) = n
+eval (Add a b) = eval a + eval b
+```
+
+That's a complete language. Parser derived from constructors. Evaluator from equations. **No separate implementations.**
+
+### The Math: Cofree[F, A]
+
+Everything is a tree with annotations:
+- **Parser:** annotate with source positions
+- **Typechecker:** annotate with types
+- **Evaluator:** annotate with values  
+- **Compiler:** annotate with target code
+
+Same structure. Different annotations. All derived from one spec.
+
+### RosettaVM
+
+Compiles Phi to CPU or CUDA:
+```bash
+rosettavm cuda program.rvm    # Compile to GPU
+./program 1000000             # 4,375x speedup at scale
+```
+
+---
+
 ## 🌟 Why Φ-AUTONOMOUS?
 
 | Feature | What It Does |
 |---------|--------------|
-| 🔄 **Recursive Self-Deploy** | Spawns child daemons across generations—fractals in process form |
-| 📐 **Golden Ratio Growth** | Uses Φ to balance spawn rates: `children = ⌊max / (gen+1) × Φ⌋` |
 | 🧬 **Vector4 CM Evolution** | Runs RosettaVM on `.phi` specs to evolve community management rules |
+| 🔄 **Recursive Self-Deploy** | Spawns child daemons across generations |
 | 🛡️ **Kill Switch Safety** | Create `kill.switch` file to halt evolution gracefully |
 | 🔍 **Self-Aware** | Each instance knows its ID, generation, children, and health status |
+| ⚡ **GPU Accelerated** | RosettaVM compiles to CUDA for massive parallelism |
 
 ---
 

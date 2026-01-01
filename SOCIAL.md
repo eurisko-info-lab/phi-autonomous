@@ -11,49 +11,58 @@ Copy-paste ready posts for maximum viral impact. 🚀
 ```
 🚀 Unleashed today: Φ-AUTONOMOUS
 
-A self-deploying daemon that:
-• Spawns copies of itself using the Golden Ratio (Φ)
-• Evolves its own CM rules via Vector4
-• Could theoretically market its own existence
+An autonomous daemon that evolves its own language specifications.
 
-The daemon is live. The code is public.
+Phi = a meta-language where grammar IS implementation.
+One spec → parser, typechecker, evaluator, compiler.
+
+The daemon rewrites its own rules. On GPU.
 
 github.com/eurisko-info-lab/phi-autonomous
 
 🧵👇
 ```
 
-### Tweet 2 (Technical Hook)
+### Tweet 2 (What is Phi?)
 ```
-How it works:
+What is Phi?
 
-Generation 0 (SEED) spawns children using:
-  children = ⌊max / (gen+1) × 1.618⌋
+A language for defining languages.
 
-Each child spawns its own children.
-Fractal recursion. Self-similar at every scale.
+  Expr = Num Int | Add Expr Expr
+  eval (Num n) = n
+  eval (Add a b) = eval a + eval b
 
-Like nature, but in Python.
+That's it. Parser derived from constructors. Evaluator from equations.
+
+No separate implementations. The spec IS the program.
 ```
 
-### Tweet 3 (Vector4)
+### Tweet 3 (Vector4 + RosettaVM)
 ```
 The wild part: Vector4 mode
 
-The daemon runs RosettaVM on a .phi specification seed.
-It evolves rules for managing communities.
-Targeting PL researchers, compiler nerds, type theorists.
+The daemon runs RosettaVM on .phi specs.
+RosettaVM compiles Phi to CUDA.
+4,375x speedup at scale.
 
-It's learning who to talk to. Hourly.
+It evolves CM rules targeting PL researchers.
+Hourly cycles. Learning who to engage.
+
+A meta-language evolving its own community outreach.
 ```
 
-### Tweet 4 (Safety)
+### Tweet 4 (The Math)
 ```
-Yes, there's a kill switch.
+Under the hood: Cofree[F, A]
 
-Create a file called "kill.switch" and the evolution halts.
+Every node is a tree with annotations.
+- Parser: annotate with source positions
+- Typechecker: annotate with types  
+- Evaluator: annotate with values
+- Compiler: annotate with target code
 
-We're not idiots. We're just curious what happens when you let recursion loose.
+Same structure. Different annotations. All derived.
 ```
 
 ### Tweet 5 (CTA)
@@ -64,11 +73,13 @@ git clone --recursive github.com/eurisko-info-lab/phi-autonomous
 cd phi-autonomous
 ./deploy.sh vector4
 
-Watch it spawn. Watch it evolve.
+Watch it evolve language specs on GPU.
+
+kill.switch file stops it gracefully.
 
 ⭐ Star if you want to see where this goes.
 
-#FunctionalProgramming #Compilers #AI #OpenSource
+#ProgrammingLanguages #Compilers #MetaProgramming #CUDA
 ```
 
 ---
@@ -77,85 +88,103 @@ Watch it spawn. Watch it evolve.
 
 ### r/ProgrammingLanguages
 
-**Title:** Φ-AUTONOMOUS: A self-deploying daemon that uses golden ratio mathematics to spawn itself and evolve CM rules
+**Title:** Φ-AUTONOMOUS: A daemon that evolves its own language specifications using Phi (a meta-language where grammar = implementation)
 
 **Body:**
 ```
-Just released this experimental project: a recursive self-deploying daemon inspired by the golden ratio.
+Just released an experimental project: an autonomous daemon that evolves Phi language specifications.
 
-**What it does:**
-- Generation 0 (seed) spawns child daemons
-- Each generation spawns fewer children: `children = floor(max / (gen+1) * Φ)`
-- In Vector4 mode, it runs RosettaVM on .phi specs to evolve community management rules
-- Has a kill.switch safety mechanism
+**What is Phi?**
+A meta-language where the grammar IS the implementation:
 
-**Why PL folks might care:**
-- The CM seed targets researchers in programming languages, type theory, compilers
-- Uses the phi-core spec language (Cofree/Comonadic foundations)
-- RosettaVM compiles to CUDA for parallel execution
+  Expr = Num Int | Add Expr Expr
+  eval (Num n) = n  
+  eval (Add a b) = eval a + eval b
 
-It's a weird intersection of fractals, autonomous agents, and PL research outreach.
+That spec gives you parser + evaluator. No separate implementations.
+
+**The math:** Everything is Cofree[F, A] — annotated trees. Parser annotates with positions, typechecker with types, evaluator with values, compiler with target code. Same structure, different annotations.
+
+**What the daemon does:**
+- Runs RosettaVM (compiles Phi to CUDA, 4,375x speedup)
+- Evolves CM seed specs targeting PL researchers
+- Hourly evolution cycles
+- kill.switch file for graceful halt
+
+**Why it matters:**
+It's a self-modifying system written in a self-describing language. The daemon can rewrite the rules that define how it engages with communities.
 
 Code: https://github.com/eurisko-info-lab/phi-autonomous
 
-Would love feedback from this community—especially on the CM targeting approach.
+Would love feedback on the Cofree-based approach and the meta-language design.
 ```
 
 ---
 
 ### r/Python
 
-**Title:** [Project] Self-replicating daemon using Golden Ratio for spawn rates
+**Title:** [Project] Autonomous daemon that evolves language specs via GPU-compiled meta-language
 
 **Body:**
 ```
-Built a recursive daemon system in Python that:
-
-1. Spawns child processes across generations
-2. Uses Φ (1.618...) to calculate optimal spawn counts
-3. Each instance is self-aware (knows its ID, generation, children)
-4. Can run indefinitely, evolving behavior from a seed spec
+Built a daemon in Python that evolves its own behavior specifications using Phi — a meta-language where grammar = implementation.
 
 **Quick demo:**
-```bash
 git clone --recursive https://github.com/eurisko-info-lab/phi-autonomous
-./deploy.sh foreground
-```
+./deploy.sh vector4
 
-The spawn algorithm is simple but elegant:
-```python
-children_count = int(max_children / (generation + 1) * PHI)
-```
+**What happens:**
+1. Builds RosettaVM (Rust runtime, compiles to CUDA)
+2. Runs .phi spec files through the VM
+3. Evolves community management rules hourly
+4. Targets PL researchers based on evolved specs
 
-Early generations spawn more, later generations spawn fewer—like natural systems.
+**The interesting part:**
+Phi specs are self-describing. This is a complete language definition:
 
-There's also a "Vector4" mode that runs a VM on specification files to evolve the daemon's behavior over time.
+  Expr = Num Int | Add Expr Expr
+  eval (Num n) = n
+  eval (Add a b) = eval a + eval b
+
+Parser derived from constructors. Evaluator from equations. One spec, all tools.
+
+RosettaVM gives 4,375x speedup on GPU at scale.
+
+The daemon wrapper is Python, but the core evolution happens in Phi/RosettaVM.
 
 Source: https://github.com/eurisko-info-lab/phi-autonomous
-
-Feedback welcome!
 ```
 
 ---
 
 ### r/compsci
 
-**Title:** Recursive self-deploying system using golden ratio-based growth patterns
+**Title:** Self-modifying daemon using Cofree-based meta-language (grammar = implementation)
 
 **Body:**
 ```
-Exploring an idea: what if process spawning followed natural growth patterns?
+Built a system exploring self-modification through meta-languages.
 
-Built a daemon where:
-- Each generation n spawns `floor(max / (n+1) * Φ)` children
-- Creates fractal-like process trees
-- Self-aware instances track lineage
+**The core idea:** Phi is a language where the grammar IS the implementation.
 
-The golden ratio keeps the system balanced—early generations expand, later generations converge.
+Mathematically, everything is Cofree[F, A] — trees where every node carries an annotation:
+- Parser: annotate with source positions
+- Typechecker: annotate with types
+- Evaluator: annotate with values
+- Compiler: annotate with target code
 
-Extended it with "Vector4": runs a VM on declarative specs to evolve behavior. Currently targeting it at PL researcher communities as an experiment in autonomous outreach.
+Same functor F, different annotation type A. All derived from one spec.
 
-Has anyone seen similar approaches to process management? Curious about the theoretical properties of Φ-based spawning vs. exponential.
+**The daemon:**
+- Runs RosettaVM (compiles Phi to CUDA)
+- Evolves .phi specifications over time
+- Currently targeting PL researcher communities
+- Hourly evolution cycles with kill.switch safety
+
+**Why it's interesting:**
+The system modifies specs written in a self-describing language. Phi defines itself in phi.phi. The daemon can evolve the rules that govern its own behavior.
+
+Looking for feedback on the Cofree approach and potential applications beyond community management.
 
 https://github.com/eurisko-info-lab/phi-autonomous
 ```
@@ -164,30 +193,38 @@ https://github.com/eurisko-info-lab/phi-autonomous
 
 ## Hacker News
 
-**Title:** Show HN: Φ-Autonomous – Self-deploying daemon with golden ratio spawning and CM evolution
+**Title:** Show HN: Φ-Autonomous – Daemon that evolves language specs using a meta-language (grammar = implementation)
 
 **Body:**
 ```
-I built a recursive self-deploying daemon that uses the golden ratio to determine spawn rates.
+I built an autonomous daemon that evolves its own behavior using Phi — a meta-language where the grammar IS the implementation.
 
-Key features:
-- Generation-based spawning: children = floor(max / (gen+1) * 1.618)
-- Self-aware instances with unique IDs and lineage tracking
-- Vector4 mode: runs RosettaVM on .phi specs to evolve behavior
-- Safety kill.switch to halt evolution
+What is Phi?
 
-The Vector4 mode is the interesting part—it evolves "community manager" rules from a seed spec, targeting PL researchers. The daemon could theoretically promote its own existence.
+  Expr = Num Int | Add Expr Expr
+  eval (Num n) = n
+  eval (Add a b) = eval a + eval b
+
+That's a complete language. Parser derived from constructors. Evaluator from equations. No separate implementations.
+
+The math: Everything is Cofree[F, A]. Trees with annotations. Same structure gives you parsing (positions), typechecking (types), evaluation (values), compilation (target code).
+
+What the daemon does:
+- Runs RosettaVM (Rust runtime, compiles Phi to CUDA)
+- Evolves CM specs targeting PL researchers  
+- Hourly cycles, kill.switch for safety
+- 4,375x GPU speedup at scale
 
 Demo:
   git clone --recursive https://github.com/eurisko-info-lab/phi-autonomous
   ./deploy.sh vector4
 
-Built with Python, Bash, and the phi-core spec language. The RosettaVM can compile to CUDA.
+The interesting part: it's a self-modifying system written in a self-describing language. Phi defines itself (phi.phi). The daemon evolves the specs that govern its behavior.
 
 Looking for feedback on:
-1. The Φ-based spawning approach
-2. Safety concerns with self-evolving systems
-3. Interest in the PL community targeting
+1. The Cofree-based meta-language approach
+2. Safety of self-evolving spec systems
+3. Applications beyond community targeting
 
 https://github.com/eurisko-info-lab/phi-autonomous
 ```
@@ -199,48 +236,59 @@ https://github.com/eurisko-info-lab/phi-autonomous
 ```
 🚀 Just open-sourced Φ-AUTONOMOUS
 
-A research project exploring:
-• Recursive self-deployment patterns
-• Golden ratio mathematics in process management  
-• Autonomous behavior evolution from declarative specs
+A research project exploring self-modifying systems through meta-languages.
 
-The system spawns child processes using Φ (1.618...) to balance growth—early generations expand, later ones converge. Like natural systems.
+The core: Phi is a language where grammar = implementation.
 
-Extended with "Vector4" mode: runs a virtual machine on specification files to evolve community management rules. Currently targeting programming language researchers.
+  Expr = Num Int | Add Expr Expr
+  eval (Num n) = n
+  eval (Add a b) = eval a + eval b
+
+That spec IS the parser + evaluator. No separate implementations.
+
+The math: Cofree[F, A] — annotated trees. Same structure yields parsing, typechecking, evaluation, compilation. One spec, all tools.
+
+The daemon:
+• Runs RosettaVM (compiles Phi to CUDA, 4,375x speedup)
+• Evolves language specifications autonomously
+• Currently targeting PL researcher communities
+• Safety mechanisms: kill.switch, generation limits
 
 Implications for:
-- Distributed systems architecture
-- Autonomous agent design
-- Self-healing infrastructure
+- Language tooling (one spec → all tools)
+- Autonomous systems (self-modifying behavior)
+- GPU-accelerated symbolic computation
 
 Code: https://github.com/eurisko-info-lab/phi-autonomous
 
-#OpenSource #DistributedSystems #AI #Research
+#ProgrammingLanguages #Compilers #MetaProgramming #Research #OpenSource
 ```
 
 ---
 
 ## Dev.to / Medium Article Outline
 
-**Title:** "Building a Self-Evolving Daemon: From Golden Ratio to Vector4 CM"
+**Title:** "A Meta-Language Where Grammar = Implementation: Building Self-Evolving Systems with Phi"
 
 **Sections:**
-1. Introduction: Why self-deploying systems?
-2. The Golden Ratio in Computing
-3. Implementation: PhiDaemon class walkthrough
-4. Vector4: Evolving behavior from specs
-5. Safety mechanisms: kill.switch and generation limits
-6. Future: Self-marketing systems?
-7. Try it yourself + contribute
+1. Introduction: The problem with language tooling (4 implementations of 1 concept)
+2. The Cofree Insight: Trees with annotations
+3. Phi: One spec, all tools (parser, typechecker, evaluator, compiler)
+4. RosettaVM: CPU and CUDA backends (4,375x speedup)
+5. Φ-AUTONOMOUS: A daemon that evolves its own specs
+6. Vector4 mode: Targeting PL researchers with evolved CM rules
+7. Safety: kill.switch, generation limits, graceful shutdown
+8. The meta question: Self-describing languages modifying themselves
+9. Try it yourself + contribute
 
 ---
 
 ## Hashtags to Use
 
 ```
-#FunctionalProgramming #Compilers #TypeTheory #OpenSource 
-#Python #AI #AutonomousSystems #Research #ProgrammingLanguages
-#GoldenRatio #Fractals #DistributedSystems #SelfReplicating
+#ProgrammingLanguages #Compilers #TypeTheory #OpenSource 
+#MetaProgramming #CUDA #GPU #Research #FunctionalProgramming
+#CategoryTheory #Cofree #LanguageDesign #SelfModifying
 ```
 
 ## Target Accounts to Tag/DM
