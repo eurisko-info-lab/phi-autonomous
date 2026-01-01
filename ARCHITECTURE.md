@@ -104,6 +104,14 @@ Using the golden ratio, the system creates balanced growth:
 - Graceful degradation on errors
 - Comprehensive logging
 
+### Design Philosophy
+**Note on Process Spawning**: The current implementation creates workspace structures and prepares child daemon environments but does not spawn actual subprocess instances. This design choice provides:
+- **Safety**: Prevents uncontrolled process proliferation
+- **Educational Value**: Demonstrates recursive deployment patterns without system impact
+- **Extensibility**: Architecture ready for full subprocess spawning if needed
+
+For production use requiring actual process spawning, extend the `_spawn_child()` method to use `subprocess.Popen()` to launch child daemon processes.
+
 ## Security Considerations
 
 ### Process Isolation
