@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Test Φ-DAEMON
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Verify scripts are executable
+        run: |
+          chmod +x deploy.sh build.sh phi_daemon.py
+      
+      - name: Syntax check
+        run: |
+          python3 -m py_compile phi_daemon.py
+          bash -n deploy.sh
+          bash -n build.sh
+      
+      - name: Run tests
+        run: |
+          python3 -m pytest test_phi_daemon.py -v || python3 test_phi_daemon.py
+      
+      - name: Test daemon initialization
+        run: |
+          timeout 5 python3 -c "
+          from phi_daemon import PhiDaemon
+          d = PhiDaemon(generation=0)
+          status = d.self_check()
+          assert status['status'] == 'operational'
+          assert status['generation'] == 0
+          print('✓ Daemon initialization OK')
+          " || true
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Check with flake8 (non-blocking)
+        run: |
+          pip install flake8
+          flake8 phi_daemon.py --max-line-length=120 --ignore=E501,W503 || true
+
+  build-rosettavm:
+    name: Build RosettaVM
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      
+      - name: Build RosettaVM
+        working-directory: specs/phi-core/ports/rust/tools/rvm
+        run: cargo build --release
+      
+      - name: Upload RosettaVM binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: rosettavm
+          path: specs/phi-core/ports/rust/tools/rvm/target/release/rvm

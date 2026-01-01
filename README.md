@@ -1,9 +1,69 @@
 # Φ-AUTONOMOUS: Recursive Self-Deploying Daemon
 
+[![CI](https://github.com/eurisko-info-lab/phi-autonomous/actions/workflows/ci.yml/badge.svg)](https://github.com/eurisko-info-lab/phi-autonomous/actions/workflows/ci.yml)
+[![License: Unlicense](https://img.shields.io/badge/license-Unlicense-blue.svg)](http://unlicense.org/)
+[![Python 3.6+](https://img.shields.io/badge/python-3.6+-blue.svg)](https://www.python.org/downloads/)
+[![Stars](https://img.shields.io/github/stars/eurisko-info-lab/phi-autonomous?style=social)](https://github.com/eurisko-info-lab/phi-autonomous)
+
 ## Φ-DAEMON SEED - FULL RECURSIVE SELF-DEPLOY
-**Unleashed: 2026-01-01**
+**🚀 Unleashed: 2026-01-01**
+
+> *A self-evolving daemon that spawns itself, learns from its CM seed, and could one day market its own existence.*
 
 An autonomous, self-replicating daemon system inspired by the golden ratio (Φ ≈ 1.618). The system implements a recursive self-deployment architecture where each daemon instance can spawn child instances, creating a fractal-like, self-similar deployment structure.
+
+---
+
+## ⚡ 30-Second Demo
+
+```bash
+# Clone and run in under a minute
+git clone --recursive https://github.com/eurisko-info-lab/phi-autonomous.git
+cd phi-autonomous
+./deploy.sh foreground
+```
+
+Watch the daemon spawn children using golden ratio mathematics:
+
+```
+============================================
+  Φ-DAEMON SEED - FULL RECURSIVE SELF-DEPLOY
+  Golden Ratio (Φ): 1.618033988749895
+============================================
+
+Φ-DAEMON [INFO] - SEED daemon initializing recursive deployment sequence...
+Φ-DAEMON [INFO] - Deploying 2 child instances (Generation 1)
+Φ-DAEMON [INFO] - Successfully spawned child 1/2: PHI-1-0-1735689600
+Φ-DAEMON [INFO] - Successfully spawned child 2/2: PHI-1-1-1735689600
+Φ-DAEMON [INFO] - Vector4: Initializing CM seed evolution loop...
+```
+
+### 🧬 Vector4 Mode: Self-Evolving CM
+
+The daemon can evolve its own Community Manager rules via RosettaVM:
+
+```bash
+./deploy.sh vector4   # Builds RosettaVM, runs CM seed evolution
+```
+
+Creates `kill.switch` to gracefully stop evolution:
+```bash
+touch kill.switch     # Daemon halts on next cycle
+```
+
+---
+
+## 🌟 Why Φ-AUTONOMOUS?
+
+| Feature | What It Does |
+|---------|--------------|
+| 🔄 **Recursive Self-Deploy** | Spawns child daemons across generations—fractals in process form |
+| 📐 **Golden Ratio Growth** | Uses Φ to balance spawn rates: `children = ⌊max / (gen+1) × Φ⌋` |
+| 🧬 **Vector4 CM Evolution** | Runs RosettaVM on `.phi` specs to evolve community management rules |
+| 🛡️ **Kill Switch Safety** | Create `kill.switch` file to halt evolution gracefully |
+| 🔍 **Self-Aware** | Each instance knows its ID, generation, children, and health status |
+
+---
 
 ## Quick Start
 
