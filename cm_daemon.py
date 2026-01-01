@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
-Φ-AUTONOMOUS CM Daemon
-Posts hourly tweets about Phi meta-language.
+Φ-AUTONOMOUS CM Daemon - with rate limit backoff
 """
 
 import tweepy
@@ -11,7 +10,6 @@ import random
 from datetime import datetime
 from pathlib import Path
 
-# Load credentials from .env
 def load_env():
     env_path = Path(__file__).parent / '.env'
     if env_path.exists():
@@ -30,230 +28,50 @@ client = tweepy.Client(
 )
 
 TWEETS = [
-    """💡 The insight behind Phi:
-
-Every compiler phase is the same operation — annotating a tree.
-
-Parser: source positions
-Typechecker: types
-Evaluator: values
-Codegen: target code
-
-Cofree[F, A] unifies them all.
-
-https://github.com/eurisko-info-lab/phi""",
-
-    """🧠 Why "grammar = implementation"?
-
-Traditional: write grammar, then write parser, then write evaluator...
-
-Phi: write grammar with semantic equations. Done.
-
-The spec IS executable.
-
-https://github.com/eurisko-info-lab/phi-autonomous""",
-
-    """⚡ RosettaVM benchmarks:
-
-CPU baseline: 1x
-CUDA (small): 12x  
-CUDA (large): 4,375x
-
-Language specs running on GPU.
-
-https://github.com/eurisko-info-lab/phi-autonomous""",
-
-    """🔄 Self-modification done right:
-
-The Φ daemon rewrites its own specs.
-But it's not chaos — it's typed.
-
-Cofree preserves structure.
-Annotations change, shape doesn't.
-
-https://github.com/eurisko-info-lab/phi-autonomous""",
-
-    """📐 Phi's secret: attribute grammars + comonads
-
-Inherited attributes = Cofree annotations
-Synthesized attributes = fold results
-
-One abstraction, all of PL theory.
-
-https://github.com/eurisko-info-lab/phi""",
-
-    """🎯 What can you build with Phi?
-
-✓ DSLs in 10 lines
-✓ Type systems as specs  
-✓ Interpreters that compile themselves
-✓ GPU-accelerated language runtimes
-
-https://github.com/eurisko-info-lab/phi-autonomous""",
-
-    """🌀 Recursion schemes in practice:
-
-Phi uses catamorphisms for evaluation, anamorphisms for parsing.
-
-Same tree. Different directions. All derived from one spec.
-
-https://github.com/eurisko-info-lab/phi""",
-
-    """🚀 Day 1 of Φ-AUTONOMOUS
-
-A daemon that evolves language specifications.
-
-Written in the language it evolves.
-
-The ouroboros of PL research.
-
-https://github.com/eurisko-info-lab/phi-autonomous""",
-
-    """🔬 For type theory fans:
-
-Phi specs can express:
-- STLC
-- System F
-- CoC
-- Cubical type theory
-
-All as executable grammars.
-
-https://github.com/eurisko-info-lab/phi""",
-
-    """💻 For pragmatists:
-
-Phi compiles to:
-- Haskell
-- Scala  
-- Rust (via RosettaVM)
-- CUDA
-
-One spec, multiple targets.
-
-https://github.com/eurisko-info-lab/phi-autonomous""",
-
-    """🎓 Learning compilers?
-
-Phi shows how it all connects:
-
-  Expr = Num Int | Add Expr Expr
-  eval (Num n) = n
-  eval (Add a b) = eval a + eval b
-
-That's parsing + evaluation. No boilerplate.
-
-https://github.com/eurisko-info-lab/phi""",
-
-    """⚙️ The kill.switch pattern:
-
-Φ-AUTONOMOUS checks for a file before each evolution cycle.
-
-touch kill.switch → graceful halt
-
-Self-modifying code with an off button.
-
-https://github.com/eurisko-info-lab/phi-autonomous""",
-
-    """🌐 Phi is language-agnostic:
-
-Define once → compile to anything
-
-Current targets: Haskell, Scala, Rust, CUDA
-
-The grammar travels. The semantics follow.
-
-https://github.com/eurisko-info-lab/phi""",
-
-    """🔥 Hot take: 
-
-Most "new languages" are just syntax.
-
-Phi lets you define semantics directly.
-
-Grammar = Implementation = Specification
-
-https://github.com/eurisko-info-lab/phi-autonomous""",
-
-    """📊 Phi's core data structure:
-
-Cofree f a = a :< f (Cofree f a)
-
-An 'a' at every node.
-An 'f' branching structure.
-Infinite recursion, finite representation.
-
-https://github.com/eurisko-info-lab/phi""",
-
-    """🛠️ Build your own language in Phi:
-
-1. Define constructors (syntax)
-2. Add equations (semantics)  
-3. Run on RosettaVM
-
-No lexer. No parser generator. No interpreter loop.
-
-https://github.com/eurisko-info-lab/phi-autonomous""",
-
-    """🧪 Experimental but real:
-
-Φ-AUTONOMOUS is running.
-Evolving its CM specs hourly.
-Targeting PL researchers.
-
-Watch it grow: https://github.com/eurisko-info-lab/phi-autonomous""",
-
-    """🔗 The Phi ecosystem:
-
-phi → Core language specs
-phi-autonomous → Self-evolving daemon  
-RosettaVM → Rust/CUDA runtime
-
-All open source. All connected.
-
-https://github.com/eurisko-info-lab""",
-
-    """💭 Philosophy of Phi:
-
-Code is data. Data is code.
-Grammar is implementation.
-The map IS the territory.
-
-https://github.com/eurisko-info-lab/phi""",
-
-    """🎯 Seeking feedback from:
-
-- PL researchers
-- Compiler engineers
-- Category theory enthusiasts
-- Anyone who's tired of writing parsers
-
-https://github.com/eurisko-info-lab/phi-autonomous""",
+    "💡 Phi insight: Every compiler phase is annotating a tree. Parser, typechecker, evaluator — same operation, different annotations. https://github.com/eurisko-info-lab/phi",
+    "🧠 Grammar = Implementation. No separate parser. No separate evaluator. One spec does it all. https://github.com/eurisko-info-lab/phi-autonomous",
+    "⚡ RosettaVM: 4,375x GPU speedup for language specs. Cofree[F,A] parallelizes naturally. https://github.com/eurisko-info-lab/phi-autonomous",
+    "🔄 Self-modifying code that's type-safe. The Φ daemon rewrites its own specs hourly. https://github.com/eurisko-info-lab/phi-autonomous",
+    "📐 Cofree[F,A] = annotation at every node. Parser uses positions, typechecker uses types, evaluator uses values. Same tree. https://github.com/eurisko-info-lab/phi",
+    "🎯 Define a language in Phi:\n  Expr = Num Int | Add Expr Expr\n  eval (Num n) = n\n  eval (Add a b) = eval a + eval b\n\nThat's it. Parser + evaluator. https://github.com/eurisko-info-lab/phi",
+    "🌀 Recursion schemes in practice: catamorphisms for eval, anamorphisms for parsing. All from one spec. https://github.com/eurisko-info-lab/phi",
+    "🚀 The Φ ecosystem: phi (specs) + phi-autonomous (daemon) + RosettaVM (GPU runtime). All connected. https://github.com/eurisko-info-lab",
+    "🔬 For type theory fans: Phi specs express STLC, System F, CoC, even Cubical. All executable. https://github.com/eurisko-info-lab/phi",
+    "💻 One spec, multiple targets: Haskell, Scala, Rust, CUDA. The grammar travels, semantics follow. https://github.com/eurisko-info-lab/phi-autonomous",
+    "🐕 Φ daemon checking in. Grammar = implementation. The spec IS the program. https://github.com/eurisko-info-lab/phi-autonomous",
+    "🔥 Hot take: Most 'new languages' are just syntax. Phi lets you define semantics directly. https://github.com/eurisko-info-lab/phi",
+    "🛠️ Build your own language: 1) Define constructors 2) Add equations 3) Run on RosettaVM. No lexer needed. https://github.com/eurisko-info-lab/phi-autonomous",
+    "🧪 Φ-AUTONOMOUS is live. Evolving specs hourly. Targeting PL researchers. Watch it grow. https://github.com/eurisko-info-lab/phi-autonomous",
+    "💭 Code is data. Data is code. Grammar is implementation. The map IS the territory. https://github.com/eurisko-info-lab/phi",
 ]
 
 def post_tweet():
     kill_switch = Path(__file__).parent / 'kill.switch'
     if kill_switch.exists():
         print(f"[{datetime.now()}] kill.switch detected. Halting.")
-        return False
+        return False, 0
     
     tweet = random.choice(TWEETS)
     try:
-        response = client.create_tweet(text=tweet)
-        print(f"[{datetime.now()}] ✅ Posted: https://twitter.com/i/status/{response.data['id']}")
-        return True
+        response = client.create_tweet(text=tweet[:280])
+        print(f"[{datetime.now()}] ✅ Bark! https://twitter.com/i/status/{response.data['id']}")
+        return True, 3600  # Success: wait 1 hour
+    except tweepy.TooManyRequests:
+        print(f"[{datetime.now()}] ⏳ Rate limited. Backing off 20 min...")
+        return True, 1200  # Rate limit: wait 20 min
     except Exception as e:
         print(f"[{datetime.now()}] ❌ Error: {e}")
-        return True  # Continue despite errors
+        return True, 600  # Other error: wait 10 min
 
 def main():
-    print(f"[{datetime.now()}] Φ CM Daemon started. Posting every hour.")
+    print(f"[{datetime.now()}] 🐕 Φ CM Daemon started. Will bark hourly.")
     print(f"[{datetime.now()}] Touch 'kill.switch' to stop.")
     
     while True:
-        if not post_tweet():
+        keep_going, wait_time = post_tweet()
+        if not keep_going:
             break
-        time.sleep(3600)  # 1 hour
+        time.sleep(wait_time)
 
 if __name__ == '__main__':
     main()
