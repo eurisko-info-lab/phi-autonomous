@@ -5,5 +5,12 @@
   "recursive_deploy": true,
   "daemon_name": "phi-autonomous",
   "unleashed_date": "2026-01-01",
-  "description": "Φ-DAEMON autonomous self-evolving language daemon"
+  "description": "Φ-DAEMON autonomous self-evolving language daemon",
+  "mention_responder": {
+    "enabled": true,
+    "check_interval_seconds": 120,
+    "rate_limit_minutes": 5,
+    "platforms": ["twitter", "mastodon", "bluesky"],
+    "use_soul": true
+  }
 }

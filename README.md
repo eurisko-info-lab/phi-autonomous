@@ -161,6 +161,9 @@ Each daemon knows its generation, children, configuration, and operational statu
 ### 📊 Comprehensive Logging
 All operations logged with timestamps, generation tracking, and status information.
 
+### 🗣️ @phi Mention Responder
+Monitors Twitter/X, Mastodon, and Bluesky for @phi mentions and responds with contextual, personality-driven replies using the soul.py system.
+
 ### ⚙️ Configurable Behavior
 JSON-based configuration for fine-tuning deployment parameters.
 
@@ -191,6 +194,9 @@ The system consists of three main components:
 1. **phi_daemon.py**: Core daemon implementation with recursive deployment logic
 2. **config.json**: Configuration file controlling daemon behavior
 3. **deploy.sh**: Deployment script for managing daemon lifecycle
+4. **mention_responder.py**: Social media mention monitoring and response system
+5. **social_daemon.py**: Scheduled content posting daemon
+6. **soul.py**: Human-like behavioral patterns (circadian rhythms, emotions, expression)
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed architecture documentation.
 
@@ -257,6 +263,52 @@ Generation: 0
 - Learning about recursion and fractals
 - Understanding process management
 - Exploring autonomous systems
+
+## 🗣️ Social Media Integration
+
+### @phi Mention Responder
+
+Monitor and respond to mentions on Twitter/X, Mastodon, and Bluesky:
+
+```bash
+python3 mention_responder.py
+```
+
+The responder:
+- **Detects topics** in mentions (meta-language, cofree, cuda, help, bugs, etc.)
+- **Generates contextual responses** based on what people are asking about
+- **Uses soul.py** for personality-driven replies with emotional coloring
+- **Respects circadian rhythms** — quieter during night hours
+- **Rate limits** to avoid spam (max 1 reply per person per 5 minutes)
+
+#### Required Environment Variables (in `.env`):
+
+```bash
+# Twitter/X
+TWITTER_API_KEY=your_key
+TWITTER_API_SECRET=your_secret
+TWITTER_ACCESS_TOKEN=your_token
+TWITTER_ACCESS_SECRET=your_token_secret
+TWITTER_BEARER_TOKEN=your_bearer_token
+
+# Mastodon
+MASTODON_INSTANCE=https://fosstodon.org
+MASTODON_ACCESS_TOKEN=your_token
+
+# Bluesky
+BLUESKY_HANDLE=phi.bsky.social
+BLUESKY_APP_PASSWORD=your_app_password
+```
+
+### Content Posting Daemon
+
+Scheduled posting to all platforms:
+
+```bash
+python3 social_daemon.py
+```
+
+Posts curated content about Phi every 2 hours. See [SOCIAL.md](SOCIAL.md) for content library.
 
 ## Safety & Resource Management
 
