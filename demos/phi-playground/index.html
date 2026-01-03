@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Φ Phi Playground - RosettaVM in Browser</title>
+    <style>
+        :root {
+            --phi-gold: #FFD700;
+            --phi-amber: #FFBF00;
+            --bg-dark: #0d1117;
+            --bg-panel: #161b22;
+            --border: #30363d;
+            --text: #c9d1d9;
+            --text-muted: #8b949e;
+            --success: #3fb950;
+            --error: #f85149;
+        }
+        
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        
+        body {
+            font-family: 'SF Mono', 'Fira Code', monospace;
+            background: var(--bg-dark);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        header {
+            background: linear-gradient(135deg, var(--bg-panel) 0%, #1c2128 100%);
+            border-bottom: 1px solid var(--border);
+            padding: 1rem 2rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        
+        .logo {
+            font-size: 2rem;
+            color: var(--phi-gold);
+            text-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
+        }
+        
+        h1 {
+            font-size: 1.5rem;
+            font-weight: 400;
+            color: var(--text);
+        }
+        
+        h1 span {
+            color: var(--text-muted);
+            font-weight: 300;
+        }
+        
+        .status {
+            margin-left: auto;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.85rem;
+        }
+        
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--text-muted);
+            animation: pulse 2s infinite;
+        }
+        
+        .status-dot.ready {
+            background: var(--success);
+        }
+        
+        .status-dot.error {
+            background: var(--error);
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        main {
+            flex: 1;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1px;
+            background: var(--border);
+        }
+        
+        .panel {
+            background: var(--bg-panel);
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .panel-header {
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+        
+        .panel-header select {
+            background: var(--bg-dark);
+            color: var(--text);
+            border: 1px solid var(--border);
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-family: inherit;
+            font-size: 0.85rem;
+        }
+        
+        .editor {
+            flex: 1;
+            position: relative;
+        }
+        
+        textarea {
+            width: 100%;
+            height: 100%;
+            background: transparent;
+            color: var(--text);
+            border: none;
+            resize: none;
+            padding: 1rem;
+            font-family: inherit;
+            font-size: 0.9rem;
+            line-height: 1.6;
+            outline: none;
+            tab-size: 2;
+        }
+        
+        .output {
+            flex: 1;
+            overflow: auto;
+            padding: 1rem;
+            font-size: 0.9rem;
+            line-height: 1.6;
+        }
+        
+        .output pre {
+            margin: 0;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        
+        .output .success { color: var(--success); }
+        .output .error { color: var(--error); }
+        .output .info { color: var(--phi-gold); }
+        
+        .controls {
+            padding: 0.75rem 1rem;
+            border-top: 1px solid var(--border);
+            display: flex;
+            gap: 0.5rem;
+        }
+        
+        button {
+            background: linear-gradient(135deg, var(--phi-gold) 0%, var(--phi-amber) 100%);
+            color: var(--bg-dark);
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            font-family: inherit;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(255, 215, 0, 0.3);
+        }
+        
+        button:active {
+            transform: translateY(0);
+        }
+        
+        button.secondary {
+            background: var(--bg-dark);
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+        
+        button.secondary:hover {
+            border-color: var(--phi-gold);
+            box-shadow: 0 0 8px rgba(255, 215, 0, 0.2);
+        }
+        
+        .info-bar {
+            background: var(--bg-panel);
+            border-top: 1px solid var(--border);
+            padding: 0.5rem 1rem;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            display: flex;
+            gap: 2rem;
+        }
+        
+        .info-bar a {
+            color: var(--phi-gold);
+            text-decoration: none;
+        }
+        
+        .info-bar a:hover {
+            text-decoration: underline;
+        }
+        
+        /* Examples dropdown */
+        .examples {
+            position: relative;
+        }
+        
+        .examples-menu {
+            display: none;
+            position: absolute;
+            top: 100%;
+            right: 0;
+            background: var(--bg-panel);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 0.5rem 0;
+            min-width: 200px;
+            z-index: 100;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+        }
+        
+        .examples-menu.show {
+            display: block;
+        }
+        
+        .examples-menu button {
+            display: block;
+            width: 100%;
+            text-align: left;
+            background: transparent;
+            color: var(--text);
+            padding: 0.5rem 1rem;
+            border-radius: 0;
+            font-weight: 400;
+        }
+        
+        .examples-menu button:hover {
+            background: var(--bg-dark);
+            transform: none;
+            box-shadow: none;
+        }
+        
+        @media (max-width: 768px) {
+            main {
+                grid-template-columns: 1fr;
+                grid-template-rows: 1fr 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="logo">Φ</div>
+        <h1>Phi Playground <span>RosettaVM in Browser</span></h1>
+        <div class="status">
+            <div class="status-dot" id="statusDot"></div>
+            <span id="statusText">Loading WASM...</span>
+        </div>
+    </header>
+    
+    <main>
+        <div class="panel">
+            <div class="panel-header">
+                <span>📝 Source</span>
+                <select id="langSelect">
+                    <option value="rvm">RVM Assembly</option>
+                    <option value="expr">Expression</option>
+                </select>
+                <div class="examples" style="margin-left: auto;">
+                    <button class="secondary" onclick="toggleExamples()">Examples ▾</button>
+                    <div class="examples-menu" id="examplesMenu">
+                        <button onclick="loadExample('fibonacci')">Fibonacci</button>
+                        <button onclick="loadExample('factorial')">Factorial</button>
+                        <button onclick="loadExample('quicksort')">Quicksort</button>
+                        <button onclick="loadExample('arithmetic')">Arithmetic</button>
+                        <button onclick="loadExample('closure')">Closures</button>
+                    </div>
+                </div>
+            </div>
+            <div class="editor">
+                <textarea id="source" spellcheck="false" placeholder="Enter RVM assembly or expression..."></textarea>
+            </div>
+            <div class="controls">
+                <button onclick="runCode()">▶ Run</button>
+                <button class="secondary" onclick="formatCode()">Format</button>
+                <button class="secondary" onclick="clearOutput()">Clear</button>
+            </div>
+        </div>
+        
+        <div class="panel">
+            <div class="panel-header">
+                <span>📤 Output</span>
+                <span id="execTime" style="margin-left: auto;"></span>
+            </div>
+            <div class="output" id="output">
+                <pre id="outputText"></pre>
+            </div>
+        </div>
+    </main>
+    
+    <div class="info-bar">
+        <span>RosettaVM <span id="version">loading...</span></span>
+        <span>WASM: <span id="wasmSize">-</span></span>
+        <a href="https://github.com/your-org/phi" target="_blank">GitHub</a>
+        <a href="https://phi-lang.org/docs" target="_blank">Documentation</a>
+    </div>
+    
+    <script type="module">
+        import init, { evaluate, evaluate_expr, version, parse_rvm } from './wasm/rosettavm.js';
+        
+        // Examples
+        const examples = {
+            fibonacci: `// Fibonacci sequence using recursion
+// Computes fib(20) = 6765
+
+fn fib(n) {
+    Push(Int(0))
+    Push(Int(1))
+    Push(Load(0))  // n
+    Label("loop")
+    Dup
+    Push(Int(0))
+    Eq
+    JumpIf("done")
+    // fib(n-1) + fib(n-2)
+    Over
+    Over
+    Add
+    Swap
+    Pop
+    Swap
+    Push(Int(1))
+    Sub
+    Jump("loop")
+    Label("done")
+    Pop
+    Pop
+    Return
+}
+
+fn main() {
+    Push(Int(20))
+    Call("fib")
+    Halt
+}`,
+            factorial: `// Factorial using recursion
+// Computes 10! = 3628800
+
+fn fact(n) {
+    Push(Load(0))    // n
+    Push(Int(1))
+    Le
+    JumpIf("base")
+    Push(Load(0))    // n
+    Push(Load(0))    // n
+    Push(Int(1))
+    Sub
+    Call("fact")
+    Mul
+    Return
+    Label("base")
+    Push(Int(1))
+    Return
+}
+
+fn main() {
+    Push(Int(10))
+    Call("fact")
+    Halt
+}`,
+            quicksort: `// Quicksort demonstration
+// Sorts [3,1,4,1,5,9,2,6]
+
+fn main() {
+    // Build list
+    Push(List([3,1,4,1,5,9,2,6]))
+    Call("quicksort")
+    Halt
+}
+
+fn quicksort(xs) {
+    Push(Load(0))    // xs
+    Length
+    Push(Int(1))
+    Le
+    JumpIf("base")
+    // Partition around pivot
+    Push(Load(0))
+    Head
+    Store(1)         // pivot
+    Push(Load(0))
+    Tail
+    Call("partition")
+    // [less, greater]
+    Dup
+    Head
+    Call("quicksort")
+    Swap
+    Tail
+    Head
+    Call("quicksort")
+    Push(Load(1))    // pivot
+    Cons
+    Concat
+    Return
+    Label("base")
+    Push(Load(0))
+    Return
+}`,
+            arithmetic: `// Simple arithmetic expressions
+// Demonstrates stack operations
+
+fn main() {
+    // (3 + 4) * (10 - 5)
+    Push(Int(3))
+    Push(Int(4))
+    Add         // 7
+    Push(Int(10))
+    Push(Int(5))
+    Sub         // 5
+    Mul         // 35
+    
+    // Show result
+    Print
+    Halt
+}`,
+            closure: `// Closures and higher-order functions
+
+fn make_adder(n) {
+    // Returns a closure that adds n
+    Push(Load(0))    // capture n
+    MkClosure("add_n", 1)
+    Return
+}
+
+fn add_n(x) {
+    Push(Load(0))    // captured n
+    Push(Load(1))    // x
+    Add
+    Return
+}
+
+fn main() {
+    Push(Int(10))
+    Call("make_adder")  // adder that adds 10
+    Push(Int(5))
+    Apply               // apply closure to 5
+    // Result: 15
+    Halt
+}`
+        };
+        
+        // State
+        let wasmReady = false;
+        
+        // Initialize WASM
+        async function initWasm() {
+            try {
+                await init();
+                
+                const ver = version();
+                document.getElementById('version').textContent = ver;
+                document.getElementById('statusDot').classList.add('ready');
+                document.getElementById('statusText').textContent = 'Ready';
+                
+                // Calculate WASM size
+                const response = await fetch('./wasm/rosettavm_bg.wasm');
+                const size = (await response.arrayBuffer()).byteLength;
+                document.getElementById('wasmSize').textContent = 
+                    size > 1024 ? `${(size / 1024).toFixed(1)} KB` : `${size} B`;
+                
+                wasmReady = true;
+                
+                // Load default example
+                loadExample('arithmetic');
+                
+                log('info', `Φ RosettaVM initialized (${ver})`);
+                log('info', 'WASM binary loaded and ready');
+                log('info', 'Select an example or write your own code\n');
+                
+            } catch (e) {
+                document.getElementById('statusDot').classList.add('error');
+                document.getElementById('statusText').textContent = 'Error loading WASM';
+                log('error', `Failed to initialize: ${e.message}`);
+            }
+        }
+        
+        // Run code
+        window.runCode = function() {
+            if (!wasmReady) {
+                log('error', 'WASM not ready yet');
+                return;
+            }
+            
+            const source = document.getElementById('source').value;
+            const lang = document.getElementById('langSelect').value;
+            
+            if (!source.trim()) {
+                log('error', 'No source code to run');
+                return;
+            }
+            
+            const startTime = performance.now();
+            
+            try {
+                let result;
+                if (lang === 'expr') {
+                    result = evaluate_expr(source);
+                } else {
+                    result = evaluate(source);
+                }
+                
+                const elapsed = (performance.now() - startTime).toFixed(2);
+                document.getElementById('execTime').textContent = `${elapsed}ms`;
+                
+                log('success', `Result: ${result}`);
+                
+            } catch (e) {
+                const elapsed = (performance.now() - startTime).toFixed(2);
+                document.getElementById('execTime').textContent = `${elapsed}ms`;
+                log('error', `Error: ${e.message || e}`);
+            }
+        };
+        
+        // Load example
+        window.loadExample = function(name) {
+            if (examples[name]) {
+                document.getElementById('source').value = examples[name];
+                document.getElementById('examplesMenu').classList.remove('show');
+                clearOutput();
+                log('info', `Loaded example: ${name}`);
+            }
+        };
+        
+        // Toggle examples menu
+        window.toggleExamples = function() {
+            document.getElementById('examplesMenu').classList.toggle('show');
+        };
+        
+        // Format code
+        window.formatCode = function() {
+            const source = document.getElementById('source').value;
+            if (!source.trim()) return;
+            
+            try {
+                const info = parse_rvm(source);
+                log('info', 'Parse info:\n' + info);
+            } catch (e) {
+                log('error', `Parse error: ${e.message || e}`);
+            }
+        };
+        
+        // Clear output
+        window.clearOutput = function() {
+            document.getElementById('outputText').innerHTML = '';
+            document.getElementById('execTime').textContent = '';
+        };
+        
+        // Log to output
+        function log(type, message) {
+            const output = document.getElementById('outputText');
+            const line = document.createElement('span');
+            line.className = type;
+            line.textContent = message + '\n';
+            output.appendChild(line);
+            output.parentElement.scrollTop = output.parentElement.scrollHeight;
+        }
+        
+        // Close examples menu on outside click
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.examples')) {
+                document.getElementById('examplesMenu').classList.remove('show');
+            }
+        });
+        
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                e.preventDefault();
+                runCode();
+            }
+        });
+        
+        // Initialize
+        initWasm();
+    </script>
+</body>
+</html>
