@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phi Code Review - Local AI with WebLLM</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0f172a;
+            color: #e2e8f0;
+            min-height: 100vh;
+        }
+        .container { max-width: 1400px; margin: 0 auto; padding: 2rem; }
+        header { text-align: center; margin-bottom: 2rem; }
+        h1 {
+            font-size: 2.5rem;
+            background: linear-gradient(135deg, #6366f1, #ec4899);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .subtitle { color: #94a3b8; }
+        .status-bar { display: flex; justify-content: center; gap: 1rem; flex-wrap: wrap; margin-top: 1rem; }
+        .status-badge {
+            display: inline-flex; align-items: center; gap: 0.5rem;
+            padding: 0.5rem 1rem; border-radius: 9999px; font-size: 0.875rem;
+        }
+        .status-badge.success { background: rgba(34, 197, 94, 0.2); color: #22c55e; }
+        .status-badge.warning { background: rgba(234, 179, 8, 0.2); color: #eab308; }
+        .status-badge.error { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+        .status-badge.loading { background: rgba(99, 102, 241, 0.2); color: #818cf8; }
+        .main-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+        @media (max-width: 900px) { .main-grid { grid-template-columns: 1fr; } }
+        .panel {
+            background: #1e293b; border-radius: 1rem; padding: 1.5rem; border: 1px solid #334155;
+        }
+        .panel h2 { font-size: 1.25rem; margin-bottom: 1rem; color: #f1f5f9; }
+        textarea {
+            width: 100%; height: 350px; background: #0f172a; border: 1px solid #334155;
+            border-radius: 0.5rem; padding: 1rem; color: #e2e8f0;
+            font-family: 'Monaco', 'Menlo', monospace; font-size: 0.875rem;
+            resize: vertical; line-height: 1.5;
+        }
+        textarea:focus { outline: none; border-color: #6366f1; }
+        .model-select { display: flex; gap: 0.5rem; margin-bottom: 1rem; flex-wrap: wrap; }
+        .model-btn {
+            padding: 0.5rem 1rem; border: 1px solid #334155; background: #1e293b;
+            color: #e2e8f0; border-radius: 0.5rem; cursor: pointer; font-size: 0.8rem;
+            transition: all 0.2s;
+        }
+        .model-btn:hover { background: #334155; }
+        .model-btn.active { background: #6366f1; border-color: #6366f1; }
+        .model-btn.loading { opacity: 0.7; cursor: wait; }
+        .capabilities { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1rem; }
+        .cap-btn {
+            padding: 0.5rem 1rem; border: 1px solid #334155; background: #1e293b;
+            color: #e2e8f0; border-radius: 0.5rem; cursor: pointer; transition: all 0.2s;
+        }
+        .cap-btn:hover:not(:disabled) { background: #334155; border-color: #6366f1; }
+        .cap-btn.active { background: #6366f1; border-color: #6366f1; }
+        .cap-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .results {
+            background: #0f172a; border: 1px solid #334155; border-radius: 0.5rem;
+            padding: 1rem; height: 350px; overflow-y: auto;
+            font-family: 'Monaco', 'Menlo', monospace; font-size: 0.875rem;
+            white-space: pre-wrap; line-height: 1.6;
+        }
+        .progress-container {
+            margin-top: 1rem; background: #0f172a; border-radius: 0.5rem;
+            padding: 1rem; display: none;
+        }
+        .progress-container.visible { display: block; }
+        .progress-bar { height: 8px; background: #334155; border-radius: 4px; overflow: hidden; margin-top: 0.5rem; }
+        .progress-fill { height: 100%; background: linear-gradient(90deg, #6366f1, #ec4899); transition: width 0.3s; }
+        .progress-text { font-size: 0.75rem; color: #94a3b8; display: flex; justify-content: space-between; }
+        .model-info { font-size: 0.75rem; color: #64748b; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #334155; }
+        .privacy-badge {
+            display: inline-flex; align-items: center; gap: 0.5rem;
+            background: rgba(34, 197, 94, 0.1); color: #22c55e;
+            padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; margin-top: 0.5rem;
+        }
+        .spinner {
+            width: 16px; height: 16px; border: 2px solid #334155; border-top-color: #6366f1;
+            border-radius: 50%; animation: spin 1s linear infinite; display: inline-block;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .stop-btn {
+            background: #ef4444; border: none; color: white; padding: 0.5rem 1rem;
+            border-radius: 0.5rem; cursor: pointer; margin-left: 0.5rem; transition: all 0.2s;
+        }
+        .stop-btn:hover { background: #dc2626; }
+        .streaming-cursor { animation: blink 1s infinite; }
+        @keyframes blink { 50% { opacity: 0; } }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🔮 Phi Code Review</h1>
+            <p class="subtitle">Real AI running locally in your browser via WebLLM</p>
+            <div class="status-bar">
+                <span id="gpu-status" class="status-badge loading"><span class="spinner"></span> Checking WebGPU...</span>
+                <span id="model-status" class="status-badge warning">Model not loaded</span>
+                <span class="status-badge success">🔒 100% Local</span>
+            </div>
+        </header>
+        
+        <div class="main-grid">
+            <div class="panel">
+                <h2>📝 Your Code</h2>
+                <textarea id="code-input">function processUser(user) {
+    // Potential issues in this code
+    var data = JSON.parse(user);
+    
+    if (data.role = "admin") {  // Bug: assignment instead of comparison
+        grantAccess(data);
+    }
+    
+    // SQL injection vulnerability
+    var query = "SELECT * FROM users WHERE id = " + data.id;
+    db.execute(query);
+    
+    // Missing null check
+    console.log(data.profile.name.toUpperCase());
+    
+    // Hardcoded secret
+    var apiKey = "sk-1234567890abcdef";
+    
+    return data;
+}</textarea>
+            </div>
+            
+            <div class="panel">
+                <h2>🤖 AI Analysis</h2>
+                <div class="model-select">
+                    <button class="model-btn" data-model="SmolLM2-360M-Instruct-q4f16_1-MLC" onclick="loadModel(this)">SmolLM 360M (200MB)</button>
+                    <button class="model-btn" data-model="Qwen2.5-0.5B-Instruct-q4f16_1-MLC" onclick="loadModel(this)">Qwen 0.5B (350MB)</button>
+                    <button class="model-btn" data-model="Llama-3.2-1B-Instruct-q4f16_1-MLC" onclick="loadModel(this)">Llama 3.2 1B (700MB)</button>
+                    <button class="model-btn" data-model="Phi-3.5-mini-instruct-q4f16_1-MLC" onclick="loadModel(this)">Phi-3.5 Mini (2GB)</button>
+                </div>
+                <div class="capabilities">
+                    <button class="cap-btn" data-cap="bugs" onclick="analyze('bugs')" disabled>🐛 Bug Detection</button>
+                    <button class="cap-btn" data-cap="security" onclick="analyze('security')" disabled>🔒 Security Audit</button>
+                    <button class="cap-btn" data-cap="refactor" onclick="analyze('refactor')" disabled>✨ Refactoring</button>
+                    <button class="cap-btn" data-cap="explain" onclick="analyze('explain')" disabled>📖 Explain</button>
+                    <button class="stop-btn" id="stop-btn" onclick="stopGeneration()" style="display:none">⏹ Stop</button>
+                </div>
+                <div id="results" class="results"><span style="color: #64748b">👆 Select a model to start. First load downloads the model (~200MB-2GB).
+The model is cached in your browser for future use.
+
+Recommended: Start with SmolLM 360M (fastest) or Qwen 0.5B (best quality/size).
+
+Requirements: Chrome 113+ or Edge 113+ with WebGPU enabled.</span></div>
+                <div id="progress" class="progress-container">
+                    <div class="progress-text"><span id="progress-label">Loading...</span><span id="progress-percent">0%</span></div>
+                    <div class="progress-bar"><div id="progress-fill" class="progress-fill" style="width: 0%"></div></div>
+                </div>
+                <div class="model-info">
+                    <div>Engine: <strong>WebLLM</strong> by MLC AI</div>
+                    <div class="privacy-badge">🔒 Your code never leaves your device</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        let webllm = null;
+        let engine = null;
+        let isGenerating = false;
+        let currentModel = null;
+        let webgpuAvailable = false;
+        
+        // Check WebGPU support
+        async function checkWebGPU() {
+            const el = document.getElementById('gpu-status');
+            const results = document.getElementById('results');
+            
+            // Check if API exists
+            if (!navigator.gpu) {
+                el.innerHTML = '❌ WebGPU API not found';
+                el.className = 'status-badge error';
+                enableFallbackMode('WebGPU API not available in this browser.');
+                return false;
+            }
+            
+            try {
+                // Try multiple adapter configurations
+                let adapter = null;
+                const configs = [
+                    {},  // Default
+                    { powerPreference: 'high-performance' },
+                    { powerPreference: 'low-power' },
+                    { forceFallbackAdapter: true }  // Software fallback
+                ];
+                
+                for (const config of configs) {
+                    try {
+                        adapter = await navigator.gpu.requestAdapter(config);
+                        if (adapter) break;
+                    } catch (e) {
+                        console.log('Adapter config failed:', config, e);
+                    }
+                }
+                
+                if (!adapter) {
+                    throw new Error('No GPU adapter available. Check chrome://gpu for WebGPU status.');
+                }
+                
+                // Try to get device
+                const device = await adapter.requestDevice();
+                if (!device) {
+                    throw new Error('Could not create GPU device');
+                }
+                
+                // Get adapter info (may not be available on all browsers)
+                let vendor = 'GPU';
+                try {
+                    const info = await adapter.requestAdapterInfo();
+                    vendor = info?.vendor || info?.description || 'GPU';
+                } catch (e) {
+                    // Some browsers don't support requestAdapterInfo
+                }
+                
+                const mem = device.limits?.maxBufferSize 
+                    ? (device.limits.maxBufferSize / 1e9).toFixed(1) + 'GB'
+                    : 'ready';
+                el.innerHTML = `✅ WebGPU: ${vendor} (${mem})`;
+                el.className = 'status-badge success';
+                webgpuAvailable = true;
+                
+                // Load WebLLM dynamically
+                try {
+                    webllm = await import('https://esm.run/@mlc-ai/web-llm');
+                } catch (e) {
+                    console.error('WebLLM import failed:', e);
+                    enableFallbackMode('Could not load WebLLM library: ' + e.message);
+                    return false;
+                }
+                
+                return true;
+            } catch (e) {
+                console.error('WebGPU check failed:', e);
+                el.innerHTML = '⚠️ WebGPU unavailable';
+                el.className = 'status-badge warning';
+                enableFallbackMode(e.message);
+                return false;
+            }
+        }
+        
+        function enableFallbackMode(reason) {
+            const results = document.getElementById('results');
+            const modelStatus = document.getElementById('model-status');
+            
+            // Hide model buttons, show fallback
+            document.querySelectorAll('.model-btn').forEach(b => b.style.display = 'none');
+            modelStatus.innerHTML = '🔧 Pattern Mode';
+            modelStatus.className = 'status-badge warning';
+            
+            // Enable capability buttons for fallback analysis
+            document.querySelectorAll('.cap-btn').forEach(b => b.disabled = false);
+            
+            results.innerHTML = `⚠️ WebGPU Issue: ${reason}
+
+Running in Pattern Analysis mode (no AI model).
+
+To enable WebGPU in Chrome:
+1. Go to chrome://flags
+2. Search for "WebGPU"
+3. Enable "Unsafe WebGPU Support" 
+4. Restart Chrome
+
+Also check:
+• chrome://gpu - look for "WebGPU: Hardware accelerated"
+• Update graphics drivers
+• Enable hardware acceleration in Chrome settings
+
+Pattern analysis still works! Click a button above.`;
+        }
+        
+        // Load model
+        window.loadModel = async function(btn) {
+            if (!webgpuAvailable || !webllm) {
+                document.getElementById('results').innerHTML = '⚠️ WebGPU not available. Using pattern analysis mode.';
+                return;
+            }
+            
+            const modelId = btn.dataset.model;
+            if (currentModel === modelId && engine) {
+                document.getElementById('results').innerHTML = '✅ Model already loaded! Select an analysis type.';
+                return;
+            }
+            
+            const modelStatus = document.getElementById('model-status');
+            const progress = document.getElementById('progress');
+            const results = document.getElementById('results');
+            
+            // Update UI
+            document.querySelectorAll('.model-btn').forEach(b => { 
+                b.classList.remove('active'); 
+                b.classList.add('loading'); 
+            });
+            btn.classList.add('active');
+            progress.classList.add('visible');
+            modelStatus.innerHTML = '<span class="spinner"></span> Loading...';
+            modelStatus.className = 'status-badge loading';
+            results.innerHTML = `Loading ${modelId}...
+
+⏳ First download may take 30-60 seconds.
+📦 Model is cached in IndexedDB for instant future loads.
+🔒 Everything runs locally in your browser.`;
+            
+            // Disable analysis buttons while loading
+            document.querySelectorAll('.cap-btn').forEach(b => b.disabled = true);
+            
+            try {
+                // Create engine with progress callback
+                engine = await webllm.CreateMLCEngine(modelId, {
+                    initProgressCallback: (report) => {
+                        const pct = Math.round(report.progress * 100);
+                        document.getElementById('progress-fill').style.width = pct + '%';
+                        document.getElementById('progress-percent').textContent = pct + '%';
+                        document.getElementById('progress-label').textContent = report.text || 'Loading...';
+                        results.innerHTML = `${report.text || 'Loading...'}\n\nProgress: ${pct}%`;
+                    }
+                });
+                
+                currentModel = modelId;
+                progress.classList.remove('visible');
+                const shortName = modelId.split('-').slice(0, 2).join(' ');
+                modelStatus.innerHTML = `✅ ${shortName}`;
+                modelStatus.className = 'status-badge success';
+                results.innerHTML = `✅ ${shortName} loaded and ready!
+
+Select an analysis type above:
+• 🐛 Bug Detection - Find bugs and issues
+• 🔒 Security Audit - Security vulnerabilities  
+• ✨ Refactoring - Code improvement suggestions
+• 📖 Explain - Understand what the code does`;
+                
+                // Enable analysis buttons
+                document.querySelectorAll('.cap-btn').forEach(b => b.disabled = false);
+                
+            } catch (e) {
+                console.error('Model load error:', e);
+                modelStatus.innerHTML = '❌ Load failed';
+                modelStatus.className = 'status-badge error';
+                results.innerHTML = `Error loading model: ${e.message}
+
+Possible solutions:
+• Use Chrome or Edge (WebGPU support required)
+• Make sure you have enough GPU memory
+• Try a smaller model like SmolLM 360M
+• Check browser console for details`;
+                progress.classList.remove('visible');
+                engine = null;
+                currentModel = null;
+            }
+            
+            document.querySelectorAll('.model-btn').forEach(b => b.classList.remove('loading'));
+        };
+        
+        // Analyze code
+        window.analyze = async function(type) {
+            if (isGenerating) return;
+            
+            const code = document.getElementById('code-input').value.trim();
+            if (!code) {
+                document.getElementById('results').innerHTML = '⚠️ Please enter some code to analyze.';
+                return;
+            }
+            
+            const results = document.getElementById('results');
+            const stopBtn = document.getElementById('stop-btn');
+            
+            // Update UI
+            document.querySelectorAll('.cap-btn').forEach(b => { 
+                b.classList.remove('active'); 
+                b.disabled = true; 
+            });
+            document.querySelector(`[data-cap="${type}"]`).classList.add('active');
+            
+            // If no WebGPU/engine, use pattern-based fallback
+            if (!engine || !webgpuAvailable) {
+                results.innerHTML = patternAnalysis(code, type);
+                document.querySelectorAll('.cap-btn').forEach(b => b.disabled = false);
+                return;
+            }
+            
+            stopBtn.style.display = 'inline-block';
+            isGenerating = true;
+            results.innerHTML = '';
+            
+            // Build prompt based on analysis type
+            const prompts = {
+                bugs: `Analyze this code for bugs and issues. List each problem found with the line number:
+
+\`\`\`
+${code}
+\`\`\`
+
+List all bugs found:`,
+                
+                security: `Perform a security audit on this code. Look for:
+- SQL injection
+- XSS vulnerabilities  
+- Hardcoded secrets/credentials
+- Input validation issues
+- Authentication/authorization flaws
+
+\`\`\`
+${code}
+\`\`\`
+
+Security issues found:`,
+                
+                refactor: `Suggest improvements for this code. Consider:
+- Code clarity and readability
+- Error handling
+- Performance
+- Best practices
+
+\`\`\`
+${code}
+\`\`\`
+
+Refactoring suggestions:`,
+                
+                explain: `Explain what this code does step by step:
+
+\`\`\`
+${code}
+\`\`\`
+
+Explanation:`
+            };
+            
+            try {
+                const stream = await engine.chat.completions.create({
+                    messages: [
+                        { role: 'system', content: 'You are a helpful code review assistant. Be concise and specific.' },
+                        { role: 'user', content: prompts[type] }
+                    ],
+                    temperature: 0.3,
+                    max_tokens: 1024,
+                    stream: true
+                });
+                
+                for await (const chunk of stream) {
+                    if (!isGenerating) break;
+                    const content = chunk.choices[0]?.delta?.content || '';
+                    results.innerHTML += content;
+                    results.scrollTop = results.scrollHeight;
+                }
+                
+            } catch (e) {
+                if (e.message !== 'Generation cancelled' && isGenerating) {
+                    results.innerHTML += `\n\n❌ Error: ${e.message}`;
+                }
+            }
+            
+            isGenerating = false;
+            stopBtn.style.display = 'none';
+            document.querySelectorAll('.cap-btn').forEach(b => b.disabled = false);
+        };
+        
+        // Stop generation
+        window.stopGeneration = function() {
+            isGenerating = false;
+            if (engine) {
+                try {
+                    engine.interruptGenerate();
+                } catch (e) {
+                    // Ignore interrupt errors
+                }
+            }
+            document.getElementById('stop-btn').style.display = 'none';
+            document.querySelectorAll('.cap-btn').forEach(b => b.disabled = false);
+        };
+        
+        // Pattern-based fallback analysis (no AI needed)
+        function patternAnalysis(code, type) {
+            const issues = [];
+            const lines = code.split('\n');
+            
+            // Common patterns to detect
+            const patterns = {
+                bugs: [
+                    { regex: /if\s*\([^=!<>]*=(?!=)[^=]/, msg: '⚠️ Assignment in condition (did you mean ==?)' },
+                    { regex: /var\s+/, msg: '💡 Consider using let/const instead of var' },
+                    { regex: /==(?!=)/, msg: '💡 Consider using === for strict equality' },
+                    { regex: /!=(?!=)/, msg: '💡 Consider using !== for strict inequality' },
+                    { regex: /\.\s*(toUpperCase|toLowerCase|trim|split)\s*\(/, msg: '⚠️ Potential null/undefined error - add null check' },
+                    { regex: /JSON\.parse\s*\(/, msg: '⚠️ JSON.parse can throw - wrap in try/catch' },
+                    { regex: /console\.(log|error|warn)/, msg: '💡 Remove console statements before production' },
+                ],
+                security: [
+                    { regex: /SELECT.*FROM.*\+/, msg: '🚨 SQL Injection vulnerability - use parameterized queries' },
+                    { regex: /innerHTML\s*=/, msg: '🚨 XSS vulnerability - use textContent instead' },
+                    { regex: /eval\s*\(/, msg: '🚨 eval() is dangerous - avoid if possible' },
+                    { regex: /(api[_-]?key|password|secret|token)\s*=\s*["'][^"']+["']/, msg: '🚨 Hardcoded credential - use environment variables' },
+                    { regex: /document\.write/, msg: '⚠️ document.write can be exploited - use DOM methods' },
+                    { regex: /crypto\.createHash\s*\(\s*["']md5["']/, msg: '⚠️ MD5 is cryptographically weak' },
+                ],
+                refactor: [
+                    { regex: /function\s+\w+\s*\([^)]{50,}\)/, msg: '💡 Too many parameters - consider using an options object' },
+                    { regex: /if.*\{[\s\S]{200,}?\}/, msg: '💡 Long if block - consider extracting to a function' },
+                    { regex: /else\s*\{\s*return/, msg: '💡 Consider early return to reduce nesting' },
+                    { regex: /\.then\s*\(.*\.then\s*\(/, msg: '💡 Promise chain - consider async/await' },
+                    { regex: /for\s*\(.*\.length/, msg: '💡 Cache array length or use for...of' },
+                    { regex: /new\s+Promise\s*\(\s*async/, msg: '💡 Async function in Promise constructor is anti-pattern' },
+                ],
+                explain: []
+            };
+            
+            const active = patterns[type] || [];
+            
+            lines.forEach((line, i) => {
+                active.forEach(p => {
+                    if (p.regex.test(line)) {
+                        issues.push(`Line ${i + 1}: ${p.msg}\n   ${line.trim()}`);
+                    }
+                });
+            });
+            
+            if (type === 'explain') {
+                return `📖 Code Analysis (Pattern Mode)
+
+This code appears to:
+${code.includes('function') ? '• Define one or more functions' : ''}
+${code.includes('class') ? '• Define a class' : ''}
+${code.includes('async') ? '• Use async/await for asynchronous operations' : ''}
+${code.includes('fetch') ? '• Make HTTP requests' : ''}
+${code.includes('JSON') ? '• Parse or stringify JSON data' : ''}
+${code.includes('SELECT') ? '• Execute database queries' : ''}
+${code.includes('console.') ? '• Log output to console' : ''}
+${code.includes('return') ? '• Return values from functions' : ''}
+
+Lines of code: ${lines.length}
+Characters: ${code.length}
+
+⚠️ For detailed AI analysis, enable WebGPU and load a model.`;
+            }
+            
+            if (issues.length === 0) {
+                return `✅ No obvious ${type} issues detected by pattern analysis.
+
+Note: This is pattern-based analysis only.
+For deeper AI-powered analysis, enable WebGPU.`;
+            }
+            
+            const titles = {
+                bugs: '🐛 Potential Bugs Found (Pattern Analysis)',
+                security: '🔒 Security Issues Found (Pattern Analysis)',
+                refactor: '✨ Refactoring Suggestions (Pattern Analysis)'
+            };
+            
+            return `${titles[type]}
+
+${issues.join('\n\n')}
+
+───────────────────────────────
+Found ${issues.length} potential issue(s).
+⚠️ This is pattern-based analysis only.
+For AI-powered analysis, enable WebGPU.`;
+        }
+        
+        // Initialize
+        checkWebGPU();
+    </script>
+</body>
+</html>

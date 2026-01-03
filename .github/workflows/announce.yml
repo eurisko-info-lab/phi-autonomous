@@ -7,6 +7,7 @@ on:
 jobs:
   announce:
     runs-on: ubuntu-latest
+    continue-on-error: true  # Don't fail the build if tweet fails
     steps:
       - uses: actions/checkout@v4
         with:
@@ -20,29 +21,43 @@ jobs:
           echo "files=$(git diff --name-only HEAD~1 HEAD 2>/dev/null | head -5 | tr '\n' ' ')" >> $GITHUB_OUTPUT
       
       - name: Tweet announcement
+        continue-on-error: true
         env:
           TWITTER_API_KEY: ${{ secrets.TWITTER_API_KEY }}
           TWITTER_API_SECRET: ${{ secrets.TWITTER_API_SECRET }}
           TWITTER_ACCESS_TOKEN: ${{ secrets.TWITTER_ACCESS_TOKEN }}
           TWITTER_ACCESS_SECRET: ${{ secrets.TWITTER_ACCESS_SECRET }}
         run: |
+          # Skip if no Twitter credentials
+          if [ -z "$TWITTER_API_KEY" ]; then
+            echo "⏭️ Skipping tweet - no Twitter credentials configured"
+            exit 0
+          fi
+          
           pip install tweepy -q
           python3 << 'EOF'
           import tweepy
           import os
+          import sys
           
-          client = tweepy.Client(
-              consumer_key=os.environ['TWITTER_API_KEY'],
-              consumer_secret=os.environ['TWITTER_API_SECRET'],
-              access_token=os.environ['TWITTER_ACCESS_TOKEN'],
-              access_token_secret=os.environ['TWITTER_ACCESS_SECRET']
-          )
+          api_key = os.environ.get('TWITTER_API_KEY', '')
+          if not api_key:
+              print("⏭️ No Twitter credentials - skipping")
+              sys.exit(0)
           
-          commit_msg = """${{ steps.commit.outputs.message }}"""
-          files = """${{ steps.commit.outputs.files }}"""
-          repo = "${{ github.repository }}"
-          
-          tweet = f"""🔄 Push to {repo}:
+          try:
+              client = tweepy.Client(
+                  consumer_key=api_key,
+                  consumer_secret=os.environ['TWITTER_API_SECRET'],
+                  access_token=os.environ['TWITTER_ACCESS_TOKEN'],
+                  access_token_secret=os.environ['TWITTER_ACCESS_SECRET']
+              )
+              
+              commit_msg = """${{ steps.commit.outputs.message }}"""
+              files = """${{ steps.commit.outputs.files }}"""
+              repo = "${{ github.repository }}"
+              
+              tweet = f"""🔄 Push to {repo}:
 
 {commit_msg[:150]}
 
@@ -51,7 +66,10 @@ Files: {files[:60]}
 https://github.com/{repo}
 
 #Phi #MetaLanguage"""
-          
-          response = client.create_tweet(text=tweet[:280])
-          print(f"✅ Announced: https://twitter.com/i/status/{response.data['id']}")
+              
+              response = client.create_tweet(text=tweet[:280])
+              print(f"✅ Tweeted: https://twitter.com/i/status/{response.data['id']}")
+          except Exception as e:
+              print(f"⚠️ Tweet failed: {e}")
+              # Don't fail the workflow
           EOF
