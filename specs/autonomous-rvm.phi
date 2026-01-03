@@ -1,0 +1,315 @@
+-- ═══════════════════════════════════════════════════════════════════════════
+-- autonomous-rvm.phi - Running Φ-Autonomous on RosettaVM
+-- ═══════════════════════════════════════════════════════════════════════════
+--
+-- This spec extends RosettaVM with the FFI needed to run autonomous.phi
+-- natively, eliminating Python entirely.
+--
+-- Bootstrap path:
+--   autonomous.phi → phi2rvm → autonomous.rvm → RosettaVM (Rust)
+--
+-- ═══════════════════════════════════════════════════════════════════════════
+
+-- ┌─────────────────────────────────────────────────────────────────────────┐
+-- │                    REQUIRED RVM EXTENSIONS                               │
+-- └─────────────────────────────────────────────────────────────────────────┘
+
+-- RosettaVM needs these built-in operations for autonomous.phi:
+
+module RVM.FFI.Network where
+
+-- HTTP client operations
+builtin httpGet    : Url -> Headers -> IO Response
+builtin httpPost   : Url -> Headers -> Body -> IO Response
+builtin httpPut    : Url -> Headers -> Body -> IO Response
+builtin httpDelete : Url -> Headers -> IO Response
+
+data Response where
+  Response : { status : Int, headers : Headers, body : Bytes } -> Response
+
+type Headers = List (String, String)
+type Url = String
+type Body = Bytes
+
+
+module RVM.FFI.JSON where
+
+-- JSON parsing/serialization
+builtin jsonParse     : String -> IO Json
+builtin jsonStringify : Json -> String
+
+data Json where
+  JNull   : Json
+  JBool   : Bool -> Json
+  JNum    : Float64 -> Json
+  JStr    : String -> Json
+  JArray  : List Json -> Json
+  JObject : List (String, Json) -> Json
+
+
+module RVM.FFI.Time where
+
+-- Time operations
+builtin now       : IO Timestamp
+builtin sleep     : Duration -> IO ()
+builtin setTimeout : Duration -> IO a -> IO TimerId
+builtin clearTimeout : TimerId -> IO ()
+
+type Timestamp = Int64
+type Duration = Int64  -- milliseconds
+type TimerId = Int
+
+
+module RVM.FFI.Process where
+
+-- Process/async operations
+builtin spawn     : IO a -> IO ThreadId
+builtin await     : ThreadId -> IO a
+builtin forever   : IO a -> IO Never
+builtin catch     : IO a -> (Error -> IO a) -> IO a
+
+type ThreadId = Int
+type Never = Void
+
+
+module RVM.FFI.Env where
+
+-- Environment variables and config
+builtin getEnv    : String -> IO (Maybe String)
+builtin setEnv    : String -> String -> IO ()
+builtin loadDotEnv : FilePath -> IO ()
+
+
+-- ┌─────────────────────────────────────────────────────────────────────────┐
+-- │                    PLATFORM-SPECIFIC BINDINGS                            │
+-- └─────────────────────────────────────────────────────────────────────────┘
+
+module Platform.Twitter where
+
+import RVM.FFI.Network
+import RVM.FFI.JSON
+
+-- Twitter/X API bindings
+twitterPost : Credentials -> String -> IO TweetId
+twitterPost creds text = do
+  let url = "https://api.twitter.com/2/tweets"
+  let headers = [
+    ("Authorization", "Bearer " <> creds.bearerToken),
+    ("Content-Type", "application/json")
+  ]
+  let body = jsonStringify (JObject [("text", JStr text)])
+  response <- httpPost url headers (toBytes body)
+  json <- jsonParse (fromBytes response.body)
+  pure (extractTweetId json)
+
+twitterReply : Credentials -> TweetId -> String -> IO TweetId
+twitterReply creds replyTo text = do
+  let url = "https://api.twitter.com/2/tweets"
+  let body = jsonStringify (JObject [
+    ("text", JStr text),
+    ("reply", JObject [("in_reply_to_tweet_id", JStr replyTo)])
+  ])
+  -- ... same pattern
+
+
+module Platform.Bluesky where
+
+import RVM.FFI.Network
+import RVM.FFI.JSON
+
+-- Bluesky AT Protocol bindings
+blueskyPost : Credentials -> String -> IO PostUri
+blueskyPost creds text = do
+  let url = "https://bsky.social/xrpc/com.atproto.repo.createRecord"
+  let body = jsonStringify (JObject [
+    ("repo", JStr creds.did),
+    ("collection", JStr "app.bsky.feed.post"),
+    ("record", JObject [
+      ("text", JStr text),
+      ("createdAt", JStr (iso8601 <$> now))
+    ])
+  ])
+  response <- httpPost url (authHeaders creds) (toBytes body)
+  json <- jsonParse (fromBytes response.body)
+  pure (extractUri json)
+
+
+module Platform.Discord where
+
+import RVM.FFI.Network
+import RVM.FFI.JSON
+
+-- Discord webhook
+discordPost : WebhookUrl -> Embed -> IO ()
+discordPost url embed = do
+  let body = jsonStringify (JObject [
+    ("embeds", JArray [embedToJson embed])
+  ])
+  _ <- httpPost url [] (toBytes body)
+  pure ()
+
+embedToJson : Embed -> Json
+embedToJson (Embed title desc color fields) = JObject [
+  ("title", JStr title),
+  ("description", JStr desc),
+  ("color", JNum (fromIntegral color)),
+  ("fields", JArray (map fieldToJson fields))
+]
+
+
+-- ┌─────────────────────────────────────────────────────────────────────────┐
+-- │                    GITHUB INTEGRATION                                    │
+-- └─────────────────────────────────────────────────────────────────────────┘
+
+module Platform.GitHub where
+
+import RVM.FFI.Network
+import RVM.FFI.JSON
+
+-- Fetch commits since a hash
+getCommitsSince : Token -> Owner -> Repo -> Hash -> IO (List Commit)
+getCommitsSince token owner repo since = do
+  let url = "https://api.github.com/repos/" <> owner <> "/" <> repo 
+          <> "/commits?sha=main&since=" <> since
+  response <- httpGet url [("Authorization", "token " <> token)]
+  json <- jsonParse (fromBytes response.body)
+  pure (parseCommits json)
+
+-- Get latest release
+getLatestRelease : Token -> Owner -> Repo -> IO (Maybe Release)
+getLatestRelease token owner repo = do
+  let url = "https://api.github.com/repos/" <> owner <> "/" <> repo 
+          <> "/releases/latest"
+  response <- httpGet url [("Authorization", "token " <> token)]
+  if response.status == 200
+    then Just <$> parseRelease <$> jsonParse (fromBytes response.body)
+    else pure Nothing
+
+
+-- ┌─────────────────────────────────────────────────────────────────────────┐
+-- │                    LLM INTEGRATION                                       │
+-- └─────────────────────────────────────────────────────────────────────────┘
+
+module LLM.Anthropic where
+
+import RVM.FFI.Network
+import RVM.FFI.JSON
+
+-- Call Claude API
+complete : ApiKey -> Model -> String -> IO String
+complete key model prompt = do
+  let url = "https://api.anthropic.com/v1/messages"
+  let headers = [
+    ("x-api-key", key),
+    ("anthropic-version", "2023-06-01"),
+    ("Content-Type", "application/json")
+  ]
+  let body = jsonStringify (JObject [
+    ("model", JStr model),
+    ("max_tokens", JNum 1024),
+    ("messages", JArray [
+      JObject [("role", JStr "user"), ("content", JStr prompt)]
+    ])
+  ])
+  response <- httpPost url headers (toBytes body)
+  json <- jsonParse (fromBytes response.body)
+  pure (extractContent json)
+
+
+-- ┌─────────────────────────────────────────────────────────────────────────┐
+-- │                    MAIN AGENT (PURE PHI)                                 │
+-- └─────────────────────────────────────────────────────────────────────────┘
+
+module Main where
+
+import Platform.GitHub
+import Platform.Twitter
+import Platform.Bluesky
+import Platform.Discord
+import LLM.Anthropic
+import RVM.FFI.Env
+import RVM.FFI.Time
+import RVM.FFI.Process
+
+-- The main agent loop - RUNS ON ROSETTAVM
+main : IO ()
+main = do
+  putStrLn "Φ-AUTONOMOUS starting on RosettaVM..."
+  loadDotEnv ".env"
+  
+  config <- loadConfig
+  state <- loadState "state.json"
+  
+  forever $ do
+    -- 1. Check for new commits
+    commits <- getCommitsSince config.githubToken "eurisko-info-lab" "phi" state.lastSeen
+    
+    -- 2. Generate announcements using Claude
+    announcements <- traverse (generateAnnouncement config) commits
+    
+    -- 3. Post to all platforms
+    traverse_ (postToAll config) announcements
+    
+    -- 4. Save state
+    saveState "state.json" (updateState state commits)
+    
+    -- 5. Wait for next poll
+    sleep (Minutes 5)
+
+generateAnnouncement : Config -> Commit -> IO Announcement
+generateAnnouncement config commit = do
+  let prompt = formatPrompt config.personality commit
+  response <- complete config.anthropicKey "claude-sonnet-4-20250514" prompt
+  pure (parseAnnouncement response commit)
+
+postToAll : Config -> Announcement -> IO ()
+postToAll config ann = do
+  -- Twitter
+  when config.twitterEnabled $
+    twitterPost config.twitterCreds (formatTweet ann)
+  
+  -- Bluesky
+  when config.blueskyEnabled $
+    blueskyPost config.bluskyCreds (formatSkeet ann)
+  
+  -- Discord
+  when config.discordEnabled $
+    discordPost config.discordWebhook (formatEmbed ann)
+  
+  putStrLn $ "Posted: " <> ann.headline
+
+
+-- ┌─────────────────────────────────────────────────────────────────────────┐
+-- │                    BUILD & RUN                                           │
+-- └─────────────────────────────────────────────────────────────────────────┘
+
+-- To run phi-autonomous on RosettaVM:
+--
+-- 1. Compile the spec to RVM bytecode:
+--      phi compile --target rvm autonomous.phi -o autonomous.rvm
+--
+-- 2. Run on RosettaVM:
+--      rvm run autonomous.rvm
+--
+-- No Python. No Node. Just Phi → RVM.
+--
+-- The Rust RosettaVM binary with FFI extensions is ~2MB.
+-- Deploy anywhere Rust compiles: Linux, macOS, Windows, WASM.
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- STATUS: This is the target architecture.
+-- 
+-- What exists today:
+--   ✓ autonomous.phi spec
+--   ✓ phi2rvm.phi compiler spec  
+--   ✓ RosettaVM runtime (Rust)
+--   ✓ Basic IO operations in RVM
+--
+-- What we need to add to RVM:
+--   □ HTTP client (reqwest)
+--   □ JSON parsing (serde_json)  
+--   □ Async runtime (tokio)
+--   □ Environment variables
+--
+-- Once those ~500 lines of Rust FFI are added, Python is eliminated.
+-- ═══════════════════════════════════════════════════════════════════════════

@@ -1,0 +1,317 @@
+-- ═══════════════════════════════════════════════════════════════════════════
+-- discord.phi - Discord Platform Spec
+-- ═══════════════════════════════════════════════════════════════════════════
+--
+-- Discord integration via webhooks for announcements.
+-- Simpler than Twitter/Bluesky: no auth complexity, just POST to webhook.
+--
+-- Webhook Docs: https://discord.com/developers/docs/resources/webhook
+--
+-- Note: Webhooks are one-way (post only). For reading/interactions,
+-- you'd need a bot with the Gateway API.
+--
+-- ═══════════════════════════════════════════════════════════════════════════
+
+module Platform.Discord where
+
+import Credentials (DiscordCreds, loadDiscordCreds, withSecret)
+import Metrics (PostMetrics, TrackedPost, Platform(Discord))
+import RVM.FFI.Network (httpPost, Response)
+import RVM.FFI.JSON (jsonStringify, Json(..))
+import RVM.FFI.Time (now)
+
+-- ┌─────────────────────────────────────────────────────────────────────────┐
+-- │                    DISCORD TYPES                                         │
+-- └─────────────────────────────────────────────────────────────────────────┘
+
+type MessageId = String
+type WebhookUrl = String
+
+-- Rich embed for pretty messages
+data Embed where
+  Embed : {
+    title       : Maybe String,
+    description : Maybe String,
+    url         : Maybe String,
+    color       : Int,              -- decimal color (e.g., 0x7289DA)
+    timestamp   : Maybe String,     -- ISO8601
+    footer      : Maybe Footer,
+    thumbnail   : Maybe Image,
+    image       : Maybe Image,
+    author      : Maybe Author,
+    fields      : [Field]
+  } -> Embed
+
+data Footer where
+  Footer : {
+    text    : String,
+    iconUrl : Maybe String
+  } -> Footer
+
+data Image where
+  Image : { url : String } -> Image
+
+data Author where
+  Author : {
+    name    : String,
+    url     : Maybe String,
+    iconUrl : Maybe String
+  } -> Author
+
+data Field where
+  Field : {
+    name   : String,
+    value  : String,
+    inline : Bool
+  } -> Field
+
+
+-- ┌─────────────────────────────────────────────────────────────────────────┐
+-- │                    COLORS                                                │
+-- └─────────────────────────────────────────────────────────────────────────┘
+
+-- Phi brand colors
+phiPurple : Int
+phiPurple = 0x818CF8  -- matches website accent
+
+phiGreen : Int
+phiGreen = 0x22C55E   -- success
+
+phiRed : Int  
+phiRed = 0xEF4444     -- error
+
+-- Content type colors
+colorForType : ContentType -> Int
+colorForType FeatureAnnouncement = phiPurple
+colorForType BugFix = phiGreen
+colorForType Documentation = 0x3B82F6  -- blue
+colorForType Breaking = phiRed
+
+data ContentType
+  = FeatureAnnouncement
+  | BugFix
+  | Documentation
+  | Breaking
+  | Community
+
+
+-- ┌─────────────────────────────────────────────────────────────────────────┐
+-- │                    POSTING                                               │
+-- └─────────────────────────────────────────────────────────────────────────┘
+
+-- Post a simple text message
+postMessage : DiscordCreds -> String -> IO (Either String ())
+postMessage creds content = do
+  when (length content > 2000) $
+    pure $ Left "Message exceeds 2000 character limit"
+  
+  withSecret creds.webhookUrl $ \url -> do
+    let body = jsonStringify $ JObject [
+          ("content", JStr content)
+        ]
+    
+    response <- httpPost url [("Content-Type", "application/json")] (toBytes body)
+    if response.status `elem` [200, 204]
+      then pure $ Right ()
+      else pure $ Left $ "Discord webhook error: " <> show response.status
+
+
+-- Post a rich embed
+postEmbed : DiscordCreds -> Embed -> IO (Either String ())
+postEmbed creds embed = do
+  withSecret creds.webhookUrl $ \url -> do
+    let body = jsonStringify $ JObject [
+          ("embeds", JArray [embedToJson embed])
+        ]
+    
+    response <- httpPost url [("Content-Type", "application/json")] (toBytes body)
+    if response.status `elem` [200, 204]
+      then pure $ Right ()
+      else pure $ Left $ "Discord webhook error: " <> show response.status
+
+
+-- Post message with embeds
+postWithEmbed : DiscordCreds -> String -> Embed -> IO (Either String ())
+postWithEmbed creds content embed = do
+  withSecret creds.webhookUrl $ \url -> do
+    let body = jsonStringify $ JObject [
+          ("content", JStr content),
+          ("embeds", JArray [embedToJson embed])
+        ]
+    
+    response <- httpPost url [("Content-Type", "application/json")] (toBytes body)
+    if response.status `elem` [200, 204]
+      then pure $ Right ()
+      else pure $ Left $ "Discord webhook error: " <> show response.status
+
+
+-- ┌─────────────────────────────────────────────────────────────────────────┐
+-- │                    EMBED BUILDERS                                        │
+-- └─────────────────────────────────────────────────────────────────────────┘
+
+-- Default empty embed
+emptyEmbed : Embed
+emptyEmbed = Embed {
+  title = Nothing,
+  description = Nothing,
+  url = Nothing,
+  color = phiPurple,
+  timestamp = Nothing,
+  footer = Nothing,
+  thumbnail = Nothing,
+  image = Nothing,
+  author = Nothing,
+  fields = []
+}
+
+-- Build an announcement embed
+announcementEmbed : Announcement -> Embed
+announcementEmbed ann = emptyEmbed {
+  title = Just ann.headline,
+  description = Just ann.summary,
+  url = Just ann.link,
+  color = colorForType (classifyAnnouncement ann),
+  timestamp = Just (iso8601 ann.timestamp),
+  author = Just $ Author {
+    name = "Φ Phi",
+    url = Just "https://eurisko-info-lab.github.io/phi/",
+    iconUrl = Just "https://raw.githubusercontent.com/eurisko-info-lab/phi/main/docs/assets/phi-icon.png"
+  },
+  footer = Just $ Footer {
+    text = "Commit: " <> take 7 ann.commitHash,
+    iconUrl = Just "https://github.githubassets.com/favicons/favicon.svg"
+  },
+  fields = commitFields ann
+}
+
+-- Add fields for commit details
+commitFields : Announcement -> [Field]
+commitFields ann = [
+  Field {
+    name = "📦 Repository",
+    value = ann.repo,
+    inline = True
+  },
+  Field {
+    name = "👤 Author", 
+    value = ann.author,
+    inline = True
+  }
+] ++ if null ann.tags then [] else [
+  Field {
+    name = "🏷️ Tags",
+    value = unwords ann.tags,
+    inline = False
+  }
+]
+
+classifyAnnouncement : Announcement -> ContentType
+classifyAnnouncement ann =
+  let msg = toLower ann.headline
+  in if "feat" `isInfixOf` msg then FeatureAnnouncement
+     else if "fix" `isInfixOf` msg then BugFix
+     else if "doc" `isInfixOf` msg then Documentation
+     else if "breaking" `isInfixOf` msg then Breaking
+     else Community
+
+
+-- ┌─────────────────────────────────────────────────────────────────────────┐
+-- │                    JSON SERIALIZATION                                    │
+-- └─────────────────────────────────────────────────────────────────────────┘
+
+embedToJson : Embed -> Json
+embedToJson e = JObject $ catMaybes [
+  ("title",)       . JStr <$> e.title,
+  ("description",) . JStr <$> e.description,
+  ("url",)         . JStr <$> e.url,
+  Just ("color", JNum (fromIntegral e.color)),
+  ("timestamp",)   . JStr <$> e.timestamp,
+  ("footer",)      . footerToJson <$> e.footer,
+  ("thumbnail",)   . imageToJson <$> e.thumbnail,
+  ("image",)       . imageToJson <$> e.image,
+  ("author",)      . authorToJson <$> e.author,
+  if null e.fields then Nothing else Just ("fields", JArray (map fieldToJson e.fields))
+]
+
+footerToJson : Footer -> Json
+footerToJson f = JObject $ catMaybes [
+  Just ("text", JStr f.text),
+  ("icon_url",) . JStr <$> f.iconUrl
+]
+
+imageToJson : Image -> Json
+imageToJson i = JObject [("url", JStr i.url)]
+
+authorToJson : Author -> Json
+authorToJson a = JObject $ catMaybes [
+  Just ("name", JStr a.name),
+  ("url",)      . JStr <$> a.url,
+  ("icon_url",) . JStr <$> a.iconUrl
+]
+
+fieldToJson : Field -> Json
+fieldToJson f = JObject [
+  ("name", JStr f.name),
+  ("value", JStr f.value),
+  ("inline", JBool f.inline)
+]
+
+
+-- ┌─────────────────────────────────────────────────────────────────────────┐
+-- │                    FORMATTING                                            │
+-- └─────────────────────────────────────────────────────────────────────────┘
+
+-- Format announcement for Discord (can be longer, has Markdown)
+formatDiscord : Announcement -> String
+formatDiscord ann = unlines [
+  "**" <> ann.headline <> "**",
+  "",
+  ann.summary,
+  "",
+  "🔗 " <> ann.link
+]
+
+
+-- ┌─────────────────────────────────────────────────────────────────────────┐
+-- │                    METRICS (LIMITED FOR WEBHOOKS)                        │
+-- └─────────────────────────────────────────────────────────────────────────┘
+
+-- Note: Webhooks don't provide metrics.
+-- To track Discord engagement, you'd need a bot.
+-- For now, we track posts but can't fetch engagement.
+
+toTrackedPost : Announcement -> TrackedPost
+toTrackedPost ann = TrackedPost {
+  postId = "discord-" <> show ann.timestamp,  -- no real ID from webhook
+  platform = Discord,
+  content = formatDiscord ann,
+  postedAt = ann.timestamp,
+  commitHash = Just ann.commitHash,
+  metrics = emptyMetrics,  -- can't fetch from webhook
+  lastUpdated = ann.timestamp
+}
+
+-- Empty metrics (no data from webhooks)
+emptyMetrics : PostMetrics
+emptyMetrics = PostMetrics 0 0 0 0 0 0 0 0
+
+
+-- ┌─────────────────────────────────────────────────────────────────────────┐
+-- │                    WEBHOOK VALIDATION                                    │
+-- └─────────────────────────────────────────────────────────────────────────┘
+
+-- Validate webhook URL format
+isValidWebhookUrl : String -> Bool
+isValidWebhookUrl url =
+  "https://discord.com/api/webhooks/" `isPrefixOf` url
+  || "https://discordapp.com/api/webhooks/" `isPrefixOf` url
+
+-- Test webhook is working
+testWebhook : DiscordCreds -> IO (Either String ())
+testWebhook creds = do
+  withSecret creds.webhookUrl $ \url -> do
+    -- GET returns webhook info
+    response <- httpGet url []
+    if response.status == 200
+      then pure $ Right ()
+      else pure $ Left $ "Webhook invalid: " <> show response.status

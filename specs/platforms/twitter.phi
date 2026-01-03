@@ -1,0 +1,332 @@
+-- ═══════════════════════════════════════════════════════════════════════════
+-- twitter.phi - Twitter/X Platform Spec
+-- ═══════════════════════════════════════════════════════════════════════════
+--
+-- Twitter API v2 integration for posting announcements and tracking metrics.
+--
+-- API Docs: https://developer.twitter.com/en/docs/twitter-api
+-- Rate Limits: 
+--   - Tweets: 200/15min user, 300/15min app
+--   - Reads: 900/15min user, 1500/15min app
+--
+-- ═══════════════════════════════════════════════════════════════════════════
+
+module Platform.Twitter where
+
+import Credentials (TwitterCreds, loadTwitterCreds, withSecret)
+import Metrics (PostMetrics, TrackedPost, Platform(Twitter))
+import RVM.FFI.Network (httpPost, httpGet, Response)
+import RVM.FFI.JSON (jsonParse, jsonStringify, Json(..))
+import RVM.FFI.Time (now, sleep)
+
+-- ┌─────────────────────────────────────────────────────────────────────────┐
+-- │                    TWITTER TYPES                                         │
+-- └─────────────────────────────────────────────────────────────────────────┘
+
+type TweetId = String
+
+data Tweet where
+  Tweet : {
+    id        : TweetId,
+    text      : String,
+    authorId  : String,
+    createdAt : String,
+    metrics   : TweetMetrics
+  } -> Tweet
+
+data TweetMetrics where
+  TweetMetrics : {
+    impressions  : Nat,
+    likes        : Nat,
+    retweets     : Nat,
+    replies      : Nat,
+    quotes       : Nat,
+    bookmarks    : Nat,
+    urlClicks    : Nat
+  } -> TweetMetrics
+
+
+-- ┌─────────────────────────────────────────────────────────────────────────┐
+-- │                    API ENDPOINTS                                         │
+-- └─────────────────────────────────────────────────────────────────────────┘
+
+baseUrl : String
+baseUrl = "https://api.twitter.com/2"
+
+-- Post a new tweet
+postTweet : TwitterCreds -> String -> IO (Either String TweetId)
+postTweet creds text = do
+  when (length text > 280) $
+    pure $ Left "Tweet exceeds 280 character limit"
+  
+  withSecret creds.accessToken $ \token -> do
+    let url = baseUrl <> "/tweets"
+    let headers = [
+          ("Authorization", "Bearer " <> token),
+          ("Content-Type", "application/json")
+        ]
+    let body = jsonStringify $ JObject [
+          ("text", JStr text)
+        ]
+    
+    response <- httpPost url headers (toBytes body)
+    parsePostResponse response
+
+parsePostResponse : Response -> IO (Either String TweetId)
+parsePostResponse resp = 
+  if resp.status == 201
+    then do
+      json <- jsonParse (fromBytes resp.body)
+      case json of
+        JObject fields -> 
+          case lookup "data" fields of
+            Just (JObject data_) ->
+              case lookup "id" data_ of
+                Just (JStr id_) -> pure $ Right id_
+                _ -> pure $ Left "Missing tweet id in response"
+            _ -> pure $ Left "Invalid response format"
+        _ -> pure $ Left "Invalid JSON response"
+    else pure $ Left $ "Twitter API error: " <> show resp.status
+
+
+-- Reply to a tweet
+replyToTweet : TwitterCreds -> TweetId -> String -> IO (Either String TweetId)
+replyToTweet creds replyTo text = do
+  withSecret creds.accessToken $ \token -> do
+    let url = baseUrl <> "/tweets"
+    let headers = [
+          ("Authorization", "Bearer " <> token),
+          ("Content-Type", "application/json")
+        ]
+    let body = jsonStringify $ JObject [
+          ("text", JStr text),
+          ("reply", JObject [
+            ("in_reply_to_tweet_id", JStr replyTo)
+          ])
+        ]
+    
+    response <- httpPost url headers (toBytes body)
+    parsePostResponse response
+
+
+-- Quote a tweet
+quoteTweet : TwitterCreds -> TweetId -> String -> IO (Either String TweetId)
+quoteTweet creds quotedId text = do
+  withSecret creds.accessToken $ \token -> do
+    let url = baseUrl <> "/tweets"
+    let headers = [
+          ("Authorization", "Bearer " <> token),
+          ("Content-Type", "application/json")
+        ]
+    let body = jsonStringify $ JObject [
+          ("text", JStr text),
+          ("quote_tweet_id", JStr quotedId)
+        ]
+    
+    response <- httpPost url headers (toBytes body)
+    parsePostResponse response
+
+
+-- ┌─────────────────────────────────────────────────────────────────────────┐
+-- │                    METRICS FETCHING                                      │
+-- └─────────────────────────────────────────────────────────────────────────┘
+
+-- Get metrics for a tweet
+getTweetMetrics : TwitterCreds -> TweetId -> IO (Either String TweetMetrics)
+getTweetMetrics creds tweetId = do
+  withSecret creds.accessToken $ \token -> do
+    let url = baseUrl <> "/tweets/" <> tweetId 
+            <> "?tweet.fields=public_metrics,non_public_metrics,organic_metrics"
+    let headers = [("Authorization", "Bearer " <> token)]
+    
+    response <- httpGet url headers
+    parseMetricsResponse response
+
+parseMetricsResponse : Response -> IO (Either String TweetMetrics)
+parseMetricsResponse resp =
+  if resp.status == 200
+    then do
+      json <- jsonParse (fromBytes resp.body)
+      pure $ extractMetrics json
+    else pure $ Left $ "Failed to fetch metrics: " <> show resp.status
+
+extractMetrics : Json -> Either String TweetMetrics
+extractMetrics (JObject fields) = do
+  data_ <- lookupE "data" fields
+  public <- lookupE "public_metrics" (unObject data_)
+  organic <- lookupE "organic_metrics" (unObject data_) <|> pure (JObject [])
+  
+  pure $ TweetMetrics {
+    impressions = getNum "impression_count" (unObject organic) `orElse` 0,
+    likes = getNum "like_count" (unObject public),
+    retweets = getNum "retweet_count" (unObject public),
+    replies = getNum "reply_count" (unObject public),
+    quotes = getNum "quote_count" (unObject public),
+    bookmarks = getNum "bookmark_count" (unObject public) `orElse` 0,
+    urlClicks = getNum "url_link_clicks" (unObject organic) `orElse` 0
+  }
+extractMetrics _ = Left "Invalid JSON structure"
+
+
+-- ┌─────────────────────────────────────────────────────────────────────────┐
+-- │                    MENTIONS & SEARCH                                     │
+-- └─────────────────────────────────────────────────────────────────────────┘
+
+-- Get mentions of @username
+getMentions : TwitterCreds -> String -> IO (Either String [Tweet])
+getMentions creds sinceId = do
+  withSecret creds.accessToken $ \token -> do
+    -- First get user ID
+    userId <- getUserId creds
+    case userId of
+      Left err -> pure $ Left err
+      Right uid -> do
+        let url = baseUrl <> "/users/" <> uid <> "/mentions"
+                <> "?tweet.fields=created_at,author_id"
+                <> (if null sinceId then "" else "&since_id=" <> sinceId)
+        let headers = [("Authorization", "Bearer " <> token)]
+        
+        response <- httpGet url headers
+        parseTweetsResponse response
+
+-- Search for tweets mentioning our topics
+searchTweets : TwitterCreds -> String -> IO (Either String [Tweet])
+searchTweets creds query = do
+  withSecret creds.accessToken $ \token -> do
+    let url = baseUrl <> "/tweets/search/recent"
+            <> "?query=" <> urlEncode query
+            <> "&tweet.fields=created_at,author_id,public_metrics"
+    let headers = [("Authorization", "Bearer " <> token)]
+    
+    response <- httpGet url headers
+    parseTweetsResponse response
+
+parseTweetsResponse : Response -> IO (Either String [Tweet])
+parseTweetsResponse resp =
+  if resp.status == 200
+    then do
+      json <- jsonParse (fromBytes resp.body)
+      pure $ extractTweets json
+    else pure $ Left $ "Search failed: " <> show resp.status
+
+
+-- ┌─────────────────────────────────────────────────────────────────────────┐
+-- │                    FORMATTING                                            │
+-- └─────────────────────────────────────────────────────────────────────────┘
+
+-- Format an announcement for Twitter (max 280 chars)
+formatTweet : Announcement -> String
+formatTweet ann = 
+  let base = ann.headline <> "\n\n" <> ann.summary
+      withLink = base <> "\n\n" <> ann.link
+      withTags = withLink <> "\n\n" <> formatHashtags ann.tags
+  in truncateTweet withTags
+
+-- Truncate to 280 chars, preserving link
+truncateTweet : String -> String
+truncateTweet text =
+  if length text <= 280
+    then text
+    else 
+      let (before, after) = breakOnLink text
+          maxBefore = 280 - length after - 3  -- "..." 
+      in take maxBefore before <> "..." <> after
+
+formatHashtags : [String] -> String
+formatHashtags tags = unwords ["#" <> t | t <- take 3 tags]
+
+
+-- ┌─────────────────────────────────────────────────────────────────────────┐
+-- │                    RATE LIMITING                                         │
+-- └─────────────────────────────────────────────────────────────────────────┘
+
+-- Track rate limit state
+data RateLimitState where
+  RateLimitState : {
+    remaining : Int,
+    resetAt   : UTCTime,
+    endpoint  : String
+  } -> RateLimitState
+
+-- Wait if rate limited
+respectRateLimit : RateLimitState -> IO ()
+respectRateLimit state = do
+  now_ <- now
+  when (state.remaining <= 0 && now_ < state.resetAt) $ do
+    let waitMs = diffUTCTime state.resetAt now_ * 1000
+    putStrLn $ "Rate limited, waiting " <> show waitMs <> "ms"
+    sleep (round waitMs)
+
+-- Parse rate limit headers from response
+parseRateLimitHeaders : [(String, String)] -> RateLimitState
+parseRateLimitHeaders headers = RateLimitState {
+  remaining = readInt $ lookup "x-rate-limit-remaining" headers `orElse` "100",
+  resetAt = fromUnixTime $ readInt $ lookup "x-rate-limit-reset" headers `orElse` "0",
+  endpoint = "tweets"
+}
+
+
+-- ┌─────────────────────────────────────────────────────────────────────────┐
+-- │                    CONVERSION TO UNIFIED METRICS                         │
+-- └─────────────────────────────────────────────────────────────────────────┘
+
+toPostMetrics : TweetMetrics -> PostMetrics
+toPostMetrics tm = PostMetrics {
+  impressions = tm.impressions,
+  likes = tm.likes,
+  reposts = tm.retweets,
+  replies = tm.replies,
+  clicks = tm.urlClicks,
+  bookmarks = tm.bookmarks,
+  quotes = tm.quotes,
+  mentions = 0  -- computed separately
+}
+
+toTrackedPost : Tweet -> TrackedPost
+toTrackedPost tweet = TrackedPost {
+  postId = tweet.id,
+  platform = Twitter,
+  content = tweet.text,
+  postedAt = parseISO8601 tweet.createdAt,
+  commitHash = Nothing,
+  metrics = toPostMetrics tweet.metrics,
+  lastUpdated = now
+}
+
+
+-- ┌─────────────────────────────────────────────────────────────────────────┐
+-- │                    HELPERS                                               │
+-- └─────────────────────────────────────────────────────────────────────────┘
+
+getUserId : TwitterCreds -> IO (Either String String)
+getUserId creds = do
+  withSecret creds.accessToken $ \token -> do
+    let url = baseUrl <> "/users/me"
+    let headers = [("Authorization", "Bearer " <> token)]
+    response <- httpGet url headers
+    if response.status == 200
+      then do
+        json <- jsonParse (fromBytes response.body)
+        case json of
+          JObject fields -> 
+            case lookup "data" fields >>= \d -> lookup "id" (unObject d) of
+              Just (JStr id_) -> pure $ Right id_
+              _ -> pure $ Left "Missing user id"
+          _ -> pure $ Left "Invalid response"
+      else pure $ Left $ "Failed to get user: " <> show response.status
+
+lookupE : String -> [(String, Json)] -> Either String Json
+lookupE key fields = 
+  case lookup key fields of
+    Just v  -> Right v
+    Nothing -> Left $ "Missing field: " <> key
+
+getNum : String -> [(String, Json)] -> Nat
+getNum key fields = 
+  case lookup key fields of
+    Just (JNum n) -> round n
+    _ -> 0
+
+unObject : Json -> [(String, Json)]
+unObject (JObject fs) = fs
+unObject _ = []

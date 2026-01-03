@@ -1,0 +1,390 @@
+-- ═══════════════════════════════════════════════════════════════════════════
+-- bluesky.phi - Bluesky AT Protocol Platform Spec
+-- ═══════════════════════════════════════════════════════════════════════════
+--
+-- Bluesky integration via the AT Protocol.
+-- Different from Twitter: decentralized, open protocol, DIDs.
+--
+-- API Docs: https://docs.bsky.app/
+-- XRPC Reference: https://atproto.com/specs/xrpc
+--
+-- ═══════════════════════════════════════════════════════════════════════════
+
+module Platform.Bluesky where
+
+import Credentials (BluskyCreds, loadBluskyCreds, withSecret)
+import Metrics (PostMetrics, TrackedPost, Platform(Bluesky))
+import RVM.FFI.Network (httpPost, httpGet, Response)
+import RVM.FFI.JSON (jsonParse, jsonStringify, Json(..))
+import RVM.FFI.Time (now, iso8601)
+
+-- ┌─────────────────────────────────────────────────────────────────────────┐
+-- │                    AT PROTOCOL TYPES                                     │
+-- └─────────────────────────────────────────────────────────────────────────┘
+
+-- AT Protocol URI: at://did:plc:xxx/app.bsky.feed.post/abc123
+type AtUri = String
+type Did = String    -- Decentralized Identifier
+type Cid = String    -- Content Identifier (IPFS-style hash)
+
+data Post where
+  Post : {
+    uri       : AtUri,
+    cid       : Cid,
+    text      : String,
+    author    : Did,
+    createdAt : String,
+    metrics   : PostMetrics_
+  } -> Post
+
+data PostMetrics_ where
+  PostMetrics_ : {
+    likes    : Nat,
+    reposts  : Nat,
+    replies  : Nat,
+    quotes   : Nat
+  } -> PostMetrics_
+
+-- Rich text facets (mentions, links, tags)
+data Facet where
+  Facet : {
+    byteStart : Int,
+    byteEnd   : Int,
+    feature   : FacetFeature
+  } -> Facet
+
+data FacetFeature
+  = Mention Did
+  | Link String
+  | Tag String
+
+
+-- ┌─────────────────────────────────────────────────────────────────────────┐
+-- │                    API ENDPOINTS                                         │
+-- └─────────────────────────────────────────────────────────────────────────┘
+
+-- Bluesky PDS (Personal Data Server) - default
+defaultPds : String
+defaultPds = "https://bsky.social"
+
+-- XRPC endpoint builder
+xrpc : String -> String -> String
+xrpc pds method = pds <> "/xrpc/" <> method
+
+
+-- Create a new post (skeet)
+createPost : BluskyCreds -> String -> IO (Either String AtUri)
+createPost creds text = do
+  when (length text > 300) $
+    pure $ Left "Post exceeds 300 grapheme limit"
+  
+  withSecret creds.accessJwt $ \jwt -> do
+    timestamp <- iso8601 <$> now
+    
+    let url = xrpc defaultPds "com.atproto.repo.createRecord"
+    let headers = [
+          ("Authorization", "Bearer " <> jwt),
+          ("Content-Type", "application/json")
+        ]
+    
+    -- Detect facets (links, mentions, hashtags)
+    let facets = detectFacets text
+    
+    let record = JObject $ [
+          ("$type", JStr "app.bsky.feed.post"),
+          ("text", JStr text),
+          ("createdAt", JStr timestamp)
+        ] ++ if null facets then [] else [("facets", JArray (map facetToJson facets))]
+    
+    let body = jsonStringify $ JObject [
+          ("repo", JStr creds.did),
+          ("collection", JStr "app.bsky.feed.post"),
+          ("record", record)
+        ]
+    
+    response <- httpPost url headers (toBytes body)
+    parseCreateResponse response
+
+parseCreateResponse : Response -> IO (Either String AtUri)
+parseCreateResponse resp =
+  if resp.status == 200
+    then do
+      json <- jsonParse (fromBytes resp.body)
+      case json of
+        JObject fields ->
+          case lookup "uri" fields of
+            Just (JStr uri) -> pure $ Right uri
+            _ -> pure $ Left "Missing uri in response"
+        _ -> pure $ Left "Invalid response"
+    else pure $ Left $ "Bluesky API error: " <> show resp.status <> " - " <> fromBytes resp.body
+
+
+-- Reply to a post
+replyToPost : BluskyCreds -> AtUri -> Cid -> String -> IO (Either String AtUri)
+replyToPost creds parentUri parentCid text = do
+  withSecret creds.accessJwt $ \jwt -> do
+    timestamp <- iso8601 <$> now
+    
+    let url = xrpc defaultPds "com.atproto.repo.createRecord"
+    let headers = [
+          ("Authorization", "Bearer " <> jwt),
+          ("Content-Type", "application/json")
+        ]
+    
+    -- Extract root from parent (for thread structure)
+    let (rootUri, rootCid) = (parentUri, parentCid)  -- simplified
+    
+    let record = JObject [
+          ("$type", JStr "app.bsky.feed.post"),
+          ("text", JStr text),
+          ("createdAt", JStr timestamp),
+          ("reply", JObject [
+            ("root", JObject [("uri", JStr rootUri), ("cid", JStr rootCid)]),
+            ("parent", JObject [("uri", JStr parentUri), ("cid", JStr parentCid)])
+          ])
+        ]
+    
+    let body = jsonStringify $ JObject [
+          ("repo", JStr creds.did),
+          ("collection", JStr "app.bsky.feed.post"),
+          ("record", record)
+        ]
+    
+    response <- httpPost url headers (toBytes body)
+    parseCreateResponse response
+
+
+-- ┌─────────────────────────────────────────────────────────────────────────┐
+-- │                    METRICS FETCHING                                      │
+-- └─────────────────────────────────────────────────────────────────────────┘
+
+-- Get engagement counts for a post
+getPostMetrics : BluskyCreds -> AtUri -> IO (Either String PostMetrics_)
+getPostMetrics creds uri = do
+  withSecret creds.accessJwt $ \jwt -> do
+    let url = xrpc defaultPds "app.bsky.feed.getPostThread"
+            <> "?uri=" <> urlEncode uri
+            <> "&depth=0"
+    let headers = [("Authorization", "Bearer " <> jwt)]
+    
+    response <- httpGet url headers
+    parseMetricsResponse response
+
+parseMetricsResponse : Response -> IO (Either String PostMetrics_)
+parseMetricsResponse resp =
+  if resp.status == 200
+    then do
+      json <- jsonParse (fromBytes resp.body)
+      pure $ extractMetrics json
+    else pure $ Left $ "Failed to fetch metrics: " <> show resp.status
+
+extractMetrics : Json -> Either String PostMetrics_
+extractMetrics (JObject fields) = do
+  thread <- lookupE "thread" fields
+  post <- lookupE "post" (unObject thread)
+  
+  pure $ PostMetrics_ {
+    likes = getNum "likeCount" (unObject post),
+    reposts = getNum "repostCount" (unObject post),
+    replies = getNum "replyCount" (unObject post),
+    quotes = getNum "quoteCount" (unObject post)
+  }
+extractMetrics _ = Left "Invalid JSON structure"
+
+
+-- ┌─────────────────────────────────────────────────────────────────────────┐
+-- │                    NOTIFICATIONS & MENTIONS                              │
+-- └─────────────────────────────────────────────────────────────────────────┘
+
+-- Get notifications (mentions, likes, reposts, follows)
+getNotifications : BluskyCreds -> Maybe String -> IO (Either String [Notification])
+getNotifications creds cursor = do
+  withSecret creds.accessJwt $ \jwt -> do
+    let url = xrpc defaultPds "app.bsky.notification.listNotifications"
+            <> maybe "" (\c -> "?cursor=" <> c) cursor
+    let headers = [("Authorization", "Bearer " <> jwt)]
+    
+    response <- httpGet url headers
+    parseNotificationsResponse response
+
+data Notification where
+  Notification : {
+    uri       : AtUri,
+    reason    : NotificationReason,
+    author    : Did,
+    record    : Maybe Json,
+    isRead    : Bool,
+    indexedAt : String
+  } -> Notification
+
+data NotificationReason
+  = Like
+  | Repost
+  | Follow
+  | Mention
+  | Reply
+  | Quote
+  deriving (Eq, Show)
+
+parseNotificationsResponse : Response -> IO (Either String [Notification])
+parseNotificationsResponse resp =
+  if resp.status == 200
+    then do
+      json <- jsonParse (fromBytes resp.body)
+      case json of
+        JObject fields ->
+          case lookup "notifications" fields of
+            Just (JArray notifs) -> pure $ Right $ mapMaybe parseNotification notifs
+            _ -> pure $ Left "Missing notifications"
+        _ -> pure $ Left "Invalid response"
+    else pure $ Left $ "Failed: " <> show resp.status
+
+
+-- ┌─────────────────────────────────────────────────────────────────────────┐
+-- │                    SESSION MANAGEMENT                                    │
+-- └─────────────────────────────────────────────────────────────────────────┘
+
+-- Refresh session when JWT expires
+refreshSession : BluskyCreds -> IO (Either String BluskyCreds)
+refreshSession creds = do
+  withSecret creds.refreshJwt $ \refreshToken -> do
+    let url = xrpc defaultPds "com.atproto.server.refreshSession"
+    let headers = [("Authorization", "Bearer " <> refreshToken)]
+    
+    response <- httpPost url headers ""
+    if response.status == 200
+      then do
+        json <- jsonParse (fromBytes response.body)
+        case json of
+          JObject fields -> do
+            let accessJwt = getStr "accessJwt" fields
+            let refreshJwt = getStr "refreshJwt" fields
+            pure $ Right $ creds { 
+              accessJwt = Secret accessJwt, 
+              refreshJwt = Secret refreshJwt 
+            }
+          _ -> pure $ Left "Invalid response"
+      else pure $ Left $ "Session refresh failed: " <> show response.status
+
+
+-- ┌─────────────────────────────────────────────────────────────────────────┐
+-- │                    FACET DETECTION                                       │
+-- └─────────────────────────────────────────────────────────────────────────┘
+
+-- Detect mentions, links, and hashtags in text
+detectFacets : String -> [Facet]
+detectFacets text = 
+  detectMentions text ++ detectLinks text ++ detectTags text
+
+detectMentions : String -> [Facet]
+detectMentions text = 
+  let matches = matchAll "@([a-zA-Z0-9.-]+)" text
+  in [Facet start end (Mention handle) | (start, end, handle) <- matches]
+
+detectLinks : String -> [Facet]
+detectLinks text =
+  let matches = matchAll "https?://[^\\s]+" text
+  in [Facet start end (Link url) | (start, end, url) <- matches]
+
+detectTags : String -> [Facet]
+detectTags text =
+  let matches = matchAll "#([a-zA-Z0-9]+)" text
+  in [Facet start end (Tag tag) | (start, end, tag) <- matches]
+
+facetToJson : Facet -> Json
+facetToJson (Facet start end feature) = JObject [
+  ("index", JObject [
+    ("byteStart", JNum (fromIntegral start)),
+    ("byteEnd", JNum (fromIntegral end))
+  ]),
+  ("features", JArray [featureToJson feature])
+]
+
+featureToJson : FacetFeature -> Json
+featureToJson (Mention did) = JObject [
+  ("$type", JStr "app.bsky.richtext.facet#mention"),
+  ("did", JStr did)
+]
+featureToJson (Link url) = JObject [
+  ("$type", JStr "app.bsky.richtext.facet#link"),
+  ("uri", JStr url)
+]
+featureToJson (Tag tag) = JObject [
+  ("$type", JStr "app.bsky.richtext.facet#tag"),
+  ("tag", JStr tag)
+]
+
+
+-- ┌─────────────────────────────────────────────────────────────────────────┐
+-- │                    FORMATTING                                            │
+-- └─────────────────────────────────────────────────────────────────────────┘
+
+-- Format an announcement for Bluesky (max 300 graphemes)
+formatSkeet : Announcement -> String
+formatSkeet ann =
+  let base = ann.headline <> "\n\n" <> ann.summary
+      withLink = base <> "\n\n" <> ann.link
+  in truncateGraphemes 300 withLink
+
+-- Bluesky uses grapheme clusters, not bytes
+truncateGraphemes : Int -> String -> String
+truncateGraphemes limit text =
+  let graphemes = toGraphemes text
+  in if length graphemes <= limit
+       then text
+       else fromGraphemes (take (limit - 1) graphemes) <> "…"
+
+
+-- ┌─────────────────────────────────────────────────────────────────────────┐
+-- │                    CONVERSION TO UNIFIED METRICS                         │
+-- └─────────────────────────────────────────────────────────────────────────┘
+
+toPostMetrics : PostMetrics_ -> PostMetrics
+toPostMetrics pm = PostMetrics {
+  impressions = 0,        -- Bluesky doesn't expose impressions
+  likes = pm.likes,
+  reposts = pm.reposts,
+  replies = pm.replies,
+  clicks = 0,             -- not tracked
+  bookmarks = 0,          -- not tracked
+  quotes = pm.quotes,
+  mentions = 0            -- computed separately
+}
+
+toTrackedPost : Post -> TrackedPost
+toTrackedPost post = TrackedPost {
+  postId = post.uri,
+  platform = Bluesky,
+  content = post.text,
+  postedAt = parseISO8601 post.createdAt,
+  commitHash = Nothing,
+  metrics = toPostMetrics post.metrics,
+  lastUpdated = now
+}
+
+
+-- ┌─────────────────────────────────────────────────────────────────────────┐
+-- │                    HELPERS                                               │
+-- └─────────────────────────────────────────────────────────────────────────┘
+
+lookupE : String -> [(String, Json)] -> Either String Json
+lookupE key fields = 
+  case lookup key fields of
+    Just v  -> Right v
+    Nothing -> Left $ "Missing field: " <> key
+
+getNum : String -> [(String, Json)] -> Nat
+getNum key fields = 
+  case lookup key fields of
+    Just (JNum n) -> round n
+    _ -> 0
+
+getStr : String -> [(String, Json)] -> String
+getStr key fields =
+  case lookup key fields of
+    Just (JStr s) -> s
+    _ -> ""
+
+unObject : Json -> [(String, Json)]
+unObject (JObject fs) = fs
+unObject _ = []

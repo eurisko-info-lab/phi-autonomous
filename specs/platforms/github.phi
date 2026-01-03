@@ -1,0 +1,396 @@
+-- ═══════════════════════════════════════════════════════════════════════════
+-- github.phi - GitHub Platform Spec
+-- ═══════════════════════════════════════════════════════════════════════════
+--
+-- GitHub integration for:
+--   1. Fetching commits to announce
+--   2. Tracking issues/PRs
+--   3. Monitoring stars/forks (metrics)
+--
+-- API Docs: https://docs.github.com/en/rest
+-- Rate Limits: 5000/hour authenticated, 60/hour unauthenticated
+--
+-- ═══════════════════════════════════════════════════════════════════════════
+
+module Platform.GitHub where
+
+import Credentials (GitHubCreds, loadGitHubCreds, withSecret)
+import Metrics (PostMetrics, TrackedPost, Platform(GitHub))
+import RVM.FFI.Network (httpGet, Response)
+import RVM.FFI.JSON (jsonParse, Json(..))
+import RVM.FFI.Time (now)
+
+-- ┌─────────────────────────────────────────────────────────────────────────┐
+-- │                    GITHUB TYPES                                          │
+-- └─────────────────────────────────────────────────────────────────────────┘
+
+type Owner = String
+type Repo = String
+type SHA = String
+
+data Commit where
+  Commit : {
+    sha       : SHA,
+    message   : String,
+    author    : CommitAuthor,
+    timestamp : String,
+    url       : String,
+    stats     : Maybe CommitStats
+  } -> Commit
+
+data CommitAuthor where
+  CommitAuthor : {
+    name  : String,
+    email : String,
+    login : Maybe String  -- GitHub username if available
+  } -> CommitAuthor
+
+data CommitStats where
+  CommitStats : {
+    additions : Int,
+    deletions : Int,
+    total     : Int
+  } -> CommitStats
+
+data Release where
+  Release : {
+    tagName    : String,
+    name       : String,
+    body       : String,
+    draft      : Bool,
+    prerelease : Bool,
+    createdAt  : String,
+    htmlUrl    : String,
+    assets     : [ReleaseAsset]
+  } -> Release
+
+data ReleaseAsset where
+  ReleaseAsset : {
+    name          : String,
+    downloadUrl   : String,
+    downloadCount : Int,
+    size          : Int
+  } -> ReleaseAsset
+
+data RepoStats where
+  RepoStats : {
+    stars      : Int,
+    forks      : Int,
+    watchers   : Int,
+    openIssues : Int
+  } -> RepoStats
+
+
+-- ┌─────────────────────────────────────────────────────────────────────────┐
+-- │                    API ENDPOINTS                                         │
+-- └─────────────────────────────────────────────────────────────────────────┘
+
+baseUrl : String
+baseUrl = "https://api.github.com"
+
+-- Headers for GitHub API
+apiHeaders : GitHubCreds -> (String -> [(String, String)])
+apiHeaders creds token = [
+  ("Authorization", "token " <> token),
+  ("Accept", "application/vnd.github.v3+json"),
+  ("User-Agent", "phi-autonomous")
+]
+
+
+-- Get commits since a SHA
+getCommitsSince : GitHubCreds -> Owner -> Repo -> SHA -> IO (Either String [Commit])
+getCommitsSince creds owner repo since = do
+  withSecret creds.token $ \token -> do
+    let url = baseUrl <> "/repos/" <> owner <> "/" <> repo 
+            <> "/commits?sha=main&per_page=100"
+            <> if null since then "" else "&since=" <> since
+    
+    response <- httpGet url (apiHeaders creds token)
+    parseCommitsResponse response since
+
+parseCommitsResponse : Response -> SHA -> IO (Either String [Commit])
+parseCommitsResponse resp since =
+  if resp.status == 200
+    then do
+      json <- jsonParse (fromBytes resp.body)
+      case json of
+        JArray commits -> 
+          -- Filter to only commits after 'since'
+          pure $ Right $ takeWhile (\c -> c.sha /= since) $ mapMaybe parseCommit commits
+        _ -> pure $ Left "Invalid commits response"
+    else pure $ Left $ "GitHub API error: " <> show resp.status
+
+parseCommit : Json -> Maybe Commit
+parseCommit (JObject fields) = do
+  sha <- getStr "sha" fields
+  commitObj <- lookup "commit" fields >>= unObject'
+  message <- getStr "message" commitObj
+  authorObj <- lookup "author" commitObj >>= unObject'
+  authorName <- getStr "name" authorObj
+  authorEmail <- getStr "email" authorObj
+  timestamp <- getStr "date" authorObj
+  url <- getStr "html_url" fields
+  
+  pure $ Commit {
+    sha = sha,
+    message = message,
+    author = CommitAuthor authorName authorEmail (getStr "login" =<< lookup "author" fields >>= unObject'),
+    timestamp = timestamp,
+    url = url,
+    stats = Nothing
+  }
+parseCommit _ = Nothing
+
+
+-- Get latest release
+getLatestRelease : GitHubCreds -> Owner -> Repo -> IO (Either String (Maybe Release))
+getLatestRelease creds owner repo = do
+  withSecret creds.token $ \token -> do
+    let url = baseUrl <> "/repos/" <> owner <> "/" <> repo <> "/releases/latest"
+    
+    response <- httpGet url (apiHeaders creds token)
+    if response.status == 200
+      then do
+        json <- jsonParse (fromBytes response.body)
+        pure $ Right $ parseRelease json
+      else if response.status == 404
+        then pure $ Right Nothing  -- no releases yet
+        else pure $ Left $ "Failed to fetch release: " <> show response.status
+
+parseRelease : Json -> Maybe Release
+parseRelease (JObject fields) = do
+  tagName <- getStr "tag_name" fields
+  name <- getStr "name" fields
+  body <- getStr "body" fields
+  draft <- getBool "draft" fields
+  prerelease <- getBool "prerelease" fields
+  createdAt <- getStr "created_at" fields
+  htmlUrl <- getStr "html_url" fields
+  assets <- case lookup "assets" fields of
+    Just (JArray as) -> Just $ mapMaybe parseAsset as
+    _ -> Just []
+  
+  pure $ Release {
+    tagName = tagName,
+    name = name,
+    body = body,
+    draft = draft,
+    prerelease = prerelease,
+    createdAt = createdAt,
+    htmlUrl = htmlUrl,
+    assets = assets
+  }
+parseRelease _ = Nothing
+
+
+-- Get repository stats (stars, forks, etc.)
+getRepoStats : GitHubCreds -> Owner -> Repo -> IO (Either String RepoStats)
+getRepoStats creds owner repo = do
+  withSecret creds.token $ \token -> do
+    let url = baseUrl <> "/repos/" <> owner <> "/" <> repo
+    
+    response <- httpGet url (apiHeaders creds token)
+    if response.status == 200
+      then do
+        json <- jsonParse (fromBytes response.body)
+        case parseRepoStats json of
+          Just stats -> pure $ Right stats
+          Nothing -> pure $ Left "Failed to parse repo stats"
+      else pure $ Left $ "Failed to fetch repo: " <> show response.status
+
+parseRepoStats : Json -> Maybe RepoStats
+parseRepoStats (JObject fields) = do
+  pure $ RepoStats {
+    stars = getInt "stargazers_count" fields `orElse` 0,
+    forks = getInt "forks_count" fields `orElse` 0,
+    watchers = getInt "subscribers_count" fields `orElse` 0,
+    openIssues = getInt "open_issues_count" fields `orElse` 0
+  }
+parseRepoStats _ = Nothing
+
+
+-- ┌─────────────────────────────────────────────────────────────────────────┐
+-- │                    COMMIT CLASSIFICATION                                 │
+-- └─────────────────────────────────────────────────────────────────────────┘
+
+-- Classify commit by conventional commit type
+data CommitType
+  = Feature      -- feat:
+  | Fix          -- fix:
+  | Docs         -- docs:
+  | Style        -- style:
+  | Refactor     -- refactor:
+  | Test         -- test:
+  | Chore        -- chore:
+  | Breaking     -- feat!: or fix!:
+  | Other
+  deriving (Eq, Show)
+
+classifyCommit : Commit -> CommitType
+classifyCommit commit =
+  let msg = toLower commit.message
+  in if "feat!" `isPrefixOf` msg || "fix!" `isPrefixOf` msg || "BREAKING" `isInfixOf` commit.message
+       then Breaking
+     else if "feat:" `isPrefixOf` msg || "feat(" `isPrefixOf` msg
+       then Feature
+     else if "fix:" `isPrefixOf` msg || "fix(" `isPrefixOf` msg
+       then Fix
+     else if "docs:" `isPrefixOf` msg || "doc:" `isPrefixOf` msg
+       then Docs
+     else if "style:" `isPrefixOf` msg
+       then Style
+     else if "refactor:" `isPrefixOf` msg
+       then Refactor
+     else if "test:" `isPrefixOf` msg
+       then Test
+     else if "chore:" `isPrefixOf` msg
+       then Chore
+     else Other
+
+-- Should we announce this commit?
+shouldAnnounce : Commit -> Bool
+shouldAnnounce commit = 
+  classifyCommit commit `elem` [Feature, Fix, Breaking, Docs]
+
+
+-- ┌─────────────────────────────────────────────────────────────────────────┐
+-- │                    METRICS TRACKING                                      │
+-- └─────────────────────────────────────────────────────────────────────────┘
+
+-- GitHub "engagement" is different - stars, forks, issues
+data GitHubMetrics where
+  GitHubMetrics : {
+    stars         : Int,
+    starsToday    : Int,   -- delta
+    forks         : Int,
+    forksToday    : Int,
+    openIssues    : Int,
+    closedToday   : Int,
+    contributors  : Int
+  } -> GitHubMetrics
+
+-- Track repo metrics over time
+trackRepoMetrics : GitHubCreds -> Owner -> Repo -> GitHubMetrics -> IO GitHubMetrics
+trackRepoMetrics creds owner repo previous = do
+  current <- getRepoStats creds owner repo
+  case current of
+    Right stats -> pure $ GitHubMetrics {
+      stars = stats.stars,
+      starsToday = stats.stars - previous.stars,
+      forks = stats.forks,
+      forksToday = stats.forks - previous.forks,
+      openIssues = stats.openIssues,
+      closedToday = previous.openIssues - stats.openIssues,  -- simplified
+      contributors = 0  -- would need separate API call
+    }
+    Left _ -> pure previous
+
+-- Convert to unified PostMetrics (for consistency)
+toPostMetrics : GitHubMetrics -> PostMetrics
+toPostMetrics gm = PostMetrics {
+  impressions = 0,           -- no page view tracking via API
+  likes = gm.starsToday,     -- stars ≈ likes
+  reposts = gm.forksToday,   -- forks ≈ reposts
+  replies = 0,               -- would track issue comments
+  clicks = 0,
+  bookmarks = 0,
+  quotes = 0,
+  mentions = 0
+}
+
+
+-- ┌─────────────────────────────────────────────────────────────────────────┐
+-- │                    ANNOUNCEMENT GENERATION                               │
+-- └─────────────────────────────────────────────────────────────────────────┘
+
+-- Generate announcement from commit
+commitToAnnouncement : Owner -> Repo -> Commit -> Announcement
+commitToAnnouncement owner repo commit = Announcement {
+  headline = formatCommitHeadline commit,
+  summary = formatCommitSummary commit,
+  link = commit.url,
+  commitHash = commit.sha,
+  author = commit.author.name,
+  repo = owner <> "/" <> repo,
+  timestamp = parseISO8601 commit.timestamp,
+  tags = inferTags commit
+}
+
+formatCommitHeadline : Commit -> String
+formatCommitHeadline commit =
+  let firstLine = head (lines commit.message)
+  in case classifyCommit commit of
+       Feature  -> "✨ " <> firstLine
+       Fix      -> "🐛 " <> firstLine
+       Docs     -> "📚 " <> firstLine
+       Breaking -> "⚠️ " <> firstLine
+       _        -> firstLine
+
+formatCommitSummary : Commit -> String
+formatCommitSummary commit =
+  let allLines = lines commit.message
+  in if length allLines > 1
+       then unlines (take 3 (tail allLines))  -- body, max 3 lines
+       else ""
+
+inferTags : Commit -> [String]
+inferTags commit =
+  let msg = toLower commit.message
+  in catMaybes [
+    if "wasm" `isInfixOf` msg then Just "WASM" else Nothing,
+    if "rvm" `isInfixOf` msg then Just "RosettaVM" else Nothing,
+    if "phi" `isInfixOf` msg then Just "Phi" else Nothing,
+    if "type" `isInfixOf` msg then Just "TypeTheory" else Nothing
+  ]
+
+
+-- ┌─────────────────────────────────────────────────────────────────────────┐
+-- │                    WATCHED REPOS                                         │
+-- └─────────────────────────────────────────────────────────────────────────┘
+
+-- Repositories to monitor
+watchedRepos : [(Owner, Repo)]
+watchedRepos = [
+  ("eurisko-info-lab", "phi"),
+  ("eurisko-info-lab", "phi-autonomous")
+]
+
+
+-- ┌─────────────────────────────────────────────────────────────────────────┐
+-- │                    HELPERS                                               │
+-- └─────────────────────────────────────────────────────────────────────────┘
+
+getStr : String -> [(String, Json)] -> Maybe String
+getStr key fields = case lookup key fields of
+  Just (JStr s) -> Just s
+  _ -> Nothing
+
+getInt : String -> [(String, Json)] -> Maybe Int
+getInt key fields = case lookup key fields of
+  Just (JNum n) -> Just (round n)
+  _ -> Nothing
+
+getBool : String -> [(String, Json)] -> Maybe Bool
+getBool key fields = case lookup key fields of
+  Just (JBool b) -> Just b
+  _ -> Nothing
+
+unObject' : Json -> Maybe [(String, Json)]
+unObject' (JObject fs) = Just fs
+unObject' _ = Nothing
+
+parseAsset : Json -> Maybe ReleaseAsset
+parseAsset (JObject fields) = do
+  name <- getStr "name" fields
+  downloadUrl <- getStr "browser_download_url" fields
+  pure $ ReleaseAsset {
+    name = name,
+    downloadUrl = downloadUrl,
+    downloadCount = getInt "download_count" fields `orElse` 0,
+    size = getInt "size" fields `orElse` 0
+  }
+parseAsset _ = Nothing
+
+orElse : Maybe a -> a -> a
+orElse (Just x) _ = x
+orElse Nothing  d = d

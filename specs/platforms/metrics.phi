@@ -1,0 +1,334 @@
+-- ═══════════════════════════════════════════════════════════════════════════
+-- metrics.phi - Platform Feedback Metrics
+-- ═══════════════════════════════════════════════════════════════════════════
+--
+-- Track engagement and feedback from each platform to learn what resonates.
+-- All metrics are stored locally and aggregated for analysis.
+--
+-- ═══════════════════════════════════════════════════════════════════════════
+
+module Metrics where
+
+import Data.Time (UTCTime, diffUTCTime)
+import Data.Map (Map)
+
+-- ┌─────────────────────────────────────────────────────────────────────────┐
+-- │                    CORE METRIC TYPES                                     │
+-- └─────────────────────────────────────────────────────────────────────────┘
+
+-- Platform identifier
+data Platform
+  = Twitter
+  | Bluesky  
+  | Discord
+  | GitHub
+  | LinkedIn
+  | Mastodon
+  | HackerNews
+  | Reddit
+  deriving (Eq, Ord, Show, Enum, Bounded)
+
+-- A posted announcement with tracking
+data TrackedPost where
+  TrackedPost : {
+    postId      : PostId,
+    platform    : Platform,
+    content     : String,
+    postedAt    : UTCTime,
+    commitHash  : Maybe String,    -- linked commit
+    metrics     : PostMetrics,
+    lastUpdated : UTCTime
+  } -> TrackedPost
+
+type PostId = String  -- platform-specific ID
+
+-- Engagement metrics for a single post
+data PostMetrics where
+  PostMetrics : {
+    impressions : Nat,       -- views/reach
+    likes       : Nat,       -- likes/favorites/reactions
+    reposts     : Nat,       -- retweets/boosts/shares
+    replies     : Nat,       -- comments/replies
+    clicks      : Nat,       -- link clicks (if trackable)
+    bookmarks   : Nat,       -- saves/bookmarks
+    quotes      : Nat,       -- quote tweets/posts
+    mentions    : Nat        -- mentions in other posts
+  } -> PostMetrics
+
+-- Default empty metrics
+emptyMetrics : PostMetrics
+emptyMetrics = PostMetrics 0 0 0 0 0 0 0 0
+
+
+-- ┌─────────────────────────────────────────────────────────────────────────┐
+-- │                    ENGAGEMENT SCORING                                    │
+-- └─────────────────────────────────────────────────────────────────────────┘
+
+-- Weighted engagement score (platform-normalized)
+engagementScore : PostMetrics -> Float
+engagementScore m = 
+  let weights = {
+    impression = 0.1,    -- passive
+    like       = 1.0,    -- light engagement
+    repost     = 3.0,    -- amplification
+    reply      = 5.0,    -- conversation
+    click      = 2.0,    -- intent
+    bookmark   = 2.5,    -- saved for later
+    quote      = 4.0,    -- engagement + commentary
+    mention    = 3.0     -- organic spread
+  }
+  in weights.impression * fromIntegral m.impressions
+   + weights.like * fromIntegral m.likes
+   + weights.repost * fromIntegral m.reposts
+   + weights.reply * fromIntegral m.replies
+   + weights.click * fromIntegral m.clicks
+   + weights.bookmark * fromIntegral m.bookmarks
+   + weights.quote * fromIntegral m.quotes
+   + weights.mention * fromIntegral m.mentions
+
+-- Engagement rate (engagement per impression)
+engagementRate : PostMetrics -> Float
+engagementRate m = 
+  if m.impressions == 0 
+    then 0.0
+    else engagementScore m / fromIntegral m.impressions
+
+-- Virality coefficient (reposts + quotes per engagement)
+viralityCoeff : PostMetrics -> Float
+viralityCoeff m =
+  let totalEngagement = m.likes + m.reposts + m.replies + m.quotes
+  in if totalEngagement == 0
+       then 0.0
+       else fromIntegral (m.reposts + m.quotes) / fromIntegral totalEngagement
+
+
+-- ┌─────────────────────────────────────────────────────────────────────────┐
+-- │                    PLATFORM-SPECIFIC NORMALIZATION                       │
+-- └─────────────────────────────────────────────────────────────────────────┘
+
+-- Different platforms have different engagement baselines
+-- These factors normalize cross-platform comparison
+
+platformNorm : Platform -> Float
+platformNorm Twitter    = 1.0    -- baseline
+platformNorm Bluesky    = 0.5    -- smaller, more engaged
+platformNorm Discord    = 0.8    -- community-focused
+platformNorm GitHub     = 2.0    -- stars/reactions are rare
+platformNorm LinkedIn   = 0.7    -- professional, lower engagement
+platformNorm Mastodon   = 0.6    -- federated, fragmented
+platformNorm HackerNews = 3.0    -- very hard to get upvotes
+platformNorm Reddit     = 1.5    -- karma is volatile
+
+normalizedScore : TrackedPost -> Float
+normalizedScore post = 
+  engagementScore post.metrics * platformNorm post.platform
+
+
+-- ┌─────────────────────────────────────────────────────────────────────────┐
+-- │                    AGGREGATED ANALYTICS                                  │
+-- └─────────────────────────────────────────────────────────────────────────┘
+
+-- Analytics for a time period
+data PeriodAnalytics where
+  PeriodAnalytics : {
+    period       : (UTCTime, UTCTime),
+    postCount    : Nat,
+    byPlatform   : Map Platform PlatformStats,
+    topPosts     : [TrackedPost],        -- sorted by score
+    avgScore     : Float,
+    totalReach   : Nat,
+    trending     : [String]              -- trending topics/hashtags
+  } -> PeriodAnalytics
+
+-- Per-platform statistics
+data PlatformStats where
+  PlatformStats : {
+    platform     : Platform,
+    postCount    : Nat,
+    totalScore   : Float,
+    avgScore     : Float,
+    bestPost     : Maybe TrackedPost,
+    worstPost    : Maybe TrackedPost,
+    totalReach   : Nat,
+    followerGrowth : Int                 -- delta over period
+  } -> PlatformStats
+
+-- Compute analytics for a list of posts
+computeAnalytics : (UTCTime, UTCTime) -> [TrackedPost] -> PeriodAnalytics
+computeAnalytics period posts =
+  let inPeriod = filter (isInPeriod period) posts
+      grouped = groupBy (.platform) inPeriod
+      stats = map computePlatformStats grouped
+      sorted = sortBy (negate . normalizedScore) inPeriod
+  in PeriodAnalytics {
+    period = period,
+    postCount = length inPeriod,
+    byPlatform = fromList [(s.platform, s) | s <- stats],
+    topPosts = take 10 sorted,
+    avgScore = average (map normalizedScore inPeriod),
+    totalReach = sum [p.metrics.impressions | p <- inPeriod],
+    trending = extractTrending inPeriod
+  }
+
+computePlatformStats : (Platform, [TrackedPost]) -> PlatformStats
+computePlatformStats (plat, posts) =
+  let scores = map normalizedScore posts
+      sorted = sortBy (negate . normalizedScore) posts
+  in PlatformStats {
+    platform = plat,
+    postCount = length posts,
+    totalScore = sum scores,
+    avgScore = average scores,
+    bestPost = listToMaybe sorted,
+    worstPost = listToMaybe (reverse sorted),
+    totalReach = sum [p.metrics.impressions | p <- posts],
+    followerGrowth = 0  -- computed separately
+  }
+
+
+-- ┌─────────────────────────────────────────────────────────────────────────┐
+-- │                    LEARNING & OPTIMIZATION                               │
+-- └─────────────────────────────────────────────────────────────────────────┘
+
+-- Content category classification
+data ContentCategory
+  = FeatureAnnouncement
+  | BugFix
+  | Documentation
+  | Community
+  | Philosophy
+  | Tutorial
+  | Meme
+  | Question
+  deriving (Eq, Ord, Show)
+
+-- Learn what content performs best
+data ContentInsights where
+  ContentInsights : {
+    bestCategory    : ContentCategory,
+    bestTimeOfDay   : (Int, Int),        -- hour range UTC
+    bestDayOfWeek   : DayOfWeek,
+    optimalLength   : (Int, Int),        -- character range
+    effectiveHashtags : [String],
+    platformStrengths : Map Platform ContentCategory
+  } -> ContentInsights
+
+-- Compute insights from historical data
+computeInsights : [TrackedPost] -> ContentInsights
+computeInsights posts = 
+  let byCategory = groupBy classifyContent posts
+      categoryScores = [(cat, avgScore ps) | (cat, ps) <- byCategory]
+      bestCat = fst $ maximumBy (comparing snd) categoryScores
+      -- ... additional analysis
+  in ContentInsights {
+    bestCategory = bestCat,
+    bestTimeOfDay = (14, 18),  -- computed from data
+    bestDayOfWeek = Tuesday,
+    optimalLength = (100, 280),
+    effectiveHashtags = ["#Phi", "#FunctionalProgramming"],
+    platformStrengths = fromList [
+      (Twitter, FeatureAnnouncement),
+      (Bluesky, Philosophy),
+      (Discord, Community),
+      (GitHub, Documentation)
+    ]
+  }
+
+-- Classify post content
+classifyContent : TrackedPost -> ContentCategory
+classifyContent post = 
+  let text = toLower post.content
+  in if "feat" `isInfixOf` text || "new" `isInfixOf` text
+       then FeatureAnnouncement
+     else if "fix" `isInfixOf` text || "bug" `isInfixOf` text
+       then BugFix
+     else if "doc" `isInfixOf` text || "readme" `isInfixOf` text
+       then Documentation
+     else Community
+
+
+-- ┌─────────────────────────────────────────────────────────────────────────┐
+-- │                    STORAGE                                               │
+-- └─────────────────────────────────────────────────────────────────────────┘
+
+-- Metrics are stored in a local JSON file
+metricsFile : FilePath
+metricsFile = "data/metrics.json"
+
+-- Load all tracked posts
+loadMetrics : IO [TrackedPost]
+loadMetrics = do
+  exists <- doesFileExist metricsFile
+  if exists
+    then do
+      json <- readFile metricsFile
+      case decode json of
+        Right posts -> pure posts
+        Left err    -> do
+          putStrLn $ "Warning: Failed to parse metrics: " <> err
+          pure []
+    else pure []
+
+-- Save tracked posts
+saveMetrics : [TrackedPost] -> IO ()
+saveMetrics posts = do
+  createDirectoryIfMissing True "data"
+  writeFile metricsFile (encode posts)
+
+-- Update metrics for a specific post
+updatePostMetrics : PostId -> Platform -> PostMetrics -> IO ()
+updatePostMetrics pid plat newMetrics = do
+  posts <- loadMetrics
+  let updated = map (updateIfMatch pid plat newMetrics) posts
+  saveMetrics updated
+
+updateIfMatch : PostId -> Platform -> PostMetrics -> TrackedPost -> TrackedPost
+updateIfMatch pid plat metrics post =
+  if post.postId == pid && post.platform == plat
+    then post { metrics = metrics, lastUpdated = now }
+    else post
+
+
+-- ┌─────────────────────────────────────────────────────────────────────────┐
+-- │                    REPORTING                                             │
+-- └─────────────────────────────────────────────────────────────────────────┘
+
+-- Generate a daily report
+dailyReport : IO String
+dailyReport = do
+  posts <- loadMetrics
+  now <- getCurrentTime
+  let yesterday = addUTCTime (-86400) now
+  let analytics = computeAnalytics (yesterday, now) posts
+  pure $ formatReport analytics
+
+formatReport : PeriodAnalytics -> String
+formatReport a = unlines [
+  "═══════════════════════════════════════════",
+  "Φ-AUTONOMOUS DAILY REPORT",
+  "═══════════════════════════════════════════",
+  "",
+  "Posts: " <> show a.postCount,
+  "Total Reach: " <> show a.totalReach,
+  "Average Score: " <> show (round a.avgScore),
+  "",
+  "BY PLATFORM:",
+  unlines [formatPlatformStats s | s <- elems a.byPlatform],
+  "",
+  "TOP POSTS:",
+  unlines [formatPost p | p <- take 5 a.topPosts]
+]
+
+formatPlatformStats : PlatformStats -> String
+formatPlatformStats s = unlines [
+  "  " <> show s.platform <> ":",
+  "    Posts: " <> show s.postCount,
+  "    Avg Score: " <> show (round s.avgScore),
+  "    Reach: " <> show s.totalReach
+]
+
+formatPost : TrackedPost -> String
+formatPost p = 
+  "  [" <> show p.platform <> "] " 
+  <> take 50 p.content <> "..."
+  <> " (score: " <> show (round $ normalizedScore p) <> ")"
