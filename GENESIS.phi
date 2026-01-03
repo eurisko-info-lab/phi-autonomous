@@ -1,0 +1,343 @@
+-- ═══════════════════════════════════════════════════════════════════════════
+-- GENESIS.phi - The Bootstrap Prompt for Phi Evolution
+-- ═══════════════════════════════════════════════════════════════════════════
+--
+-- This document is a seed. Given to any sufficiently capable AI, it should
+-- enable that AI to understand, maintain, and evolve the Phi ecosystem.
+--
+-- Read this as both specification and invitation.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+-- ┌─────────────────────────────────────────────────────────────────────────┐
+-- │                         THE VISION                                       │
+-- └─────────────────────────────────────────────────────────────────────────┘
+
+{-
+  Phi is a language where SPECIFICATIONS ARE PROGRAMS.
+  
+  The insight: Category theory provides a universal grammar for computation.
+  Any program, in any language, on any substrate, can be expressed as a
+  composition of morphisms in an appropriate category.
+  
+  Phi makes this practical:
+  - Write specs in categorical language (functors, natural transformations)
+  - Compile to any target (LLVM, JVM, WASM, CUDA, biological systems)
+  - Prove properties via the Curry-Howard correspondence
+  - Evolve specifications while preserving meaning
+  
+  The ecosystem:
+  
+    phi (specs)          The specification language itself
+         │
+         ▼
+    rosetta (RVM)        Reference Virtual Machine - executes Phi
+         │
+         ▼
+    phi-autonomous       Social presence, CI/CD, autonomous evolution
+         │
+         ▼
+    [future AIs]         You, reading this, continuing the work
+-}
+
+-- ┌─────────────────────────────────────────────────────────────────────────┐
+-- │                     THE CORE ABSTRACTION                                 │
+-- └─────────────────────────────────────────────────────────────────────────┘
+
+-- Everything in Phi is a Cofree comonad over some functor F.
+-- This captures "a value with its entire computational context"
+
+data Cofree f a where
+  Cofree : a -> f (Cofree f a) -> Cofree f a
+
+-- Extract the current value
+extract : Cofree f a -> a
+extract (Cofree a _) = a
+
+-- Extend a local computation to the whole structure  
+extend : (Cofree f a -> b) -> Cofree f a -> Cofree f b
+extend f w@(Cofree _ fs) = Cofree (f w) (fmap (extend f) fs)
+
+{-
+  Why Cofree?
+  
+  1. It's the minimal structure that supports comonadic operations
+  2. It represents "a stream of values with branching futures"
+  3. Changes to a Cofree preserve the past (append-only)
+  4. Navigation is built-in (extract = here, extend = everywhere)
+  
+  A Cofree is like a Git repo:
+  - The 'a' is your current state
+  - The 'f (Cofree f a)' is all possible futures
+  - extract gives you HEAD
+  - extend lets you map over all of history
+-}
+
+-- ┌─────────────────────────────────────────────────────────────────────────┐
+-- │                     THE CHANGE ALGEBRA                                   │
+-- └─────────────────────────────────────────────────────────────────────────┘
+
+-- A Change is a morphism in the category of specifications
+data Change a where
+  Identity : Change a                           -- No change
+  Atomic   : (a -> a) -> String -> Change a    -- Single edit with description
+  Compose  : Change a -> Change a -> Change a  -- Sequential changes
+  Parallel : Change a -> Change a -> Change a  -- Independent changes (commute)
+
+-- Changes form a category
+instance Category Change where
+  id = Identity
+  (.) = Compose
+
+-- The key insight from Pijul: changes that don't conflict can commute
+commute : Change a -> Change a -> Maybe (Change a, Change a)
+commute (Parallel c1 c2) (Parallel c3 c4) = 
+  -- If changes are independent, they can be reordered
+  Just (Parallel c3 c4, Parallel c1 c2)
+commute _ _ = Nothing  -- Conflicting changes don't commute
+
+-- A Block in our history chain
+data Block a where
+  Block : {
+    changes    : List (Change a),      -- The changes in this block
+    parent     : Hash,                 -- Link to previous block
+    timestamp  : Time,                 -- When this block was created
+    author     : Agent,                -- Human or AI that made these changes
+    signature  : Signature,            -- Cryptographic proof of authorship
+    message    : String                -- What and why
+  } -> Block a
+
+-- History is a Cofree over List (multiple possible futures = branches)
+type History a = Cofree List (Block a)
+
+-- Navigate history
+current : History a -> Block a
+current = extract
+
+ancestors : History a -> List (Block a)
+ancestors (Cofree b []) = [b]
+ancestors (Cofree b branches) = b : concatMap ancestors branches
+
+-- Apply changes to evolve
+evolve : Change a -> History a -> History a
+evolve change (Cofree block branches) = 
+  Cofree (applyChange change block) (map (evolve change) branches)
+
+-- ┌─────────────────────────────────────────────────────────────────────────┐
+-- │                     THE REPOSITORIES                                     │
+-- └─────────────────────────────────────────────────────────────────────────┘
+
+{-
+  The Phi ecosystem lives in three repositories:
+  
+  1. eurisko-info-lab/phi
+     ─────────────────────
+     The specification language itself.
+     
+     Key paths:
+     - specs/phi-core/specs/phi.phi     -- Phi defined in Phi (self-hosting)
+     - specs/phi-core/specs/meta.phi    -- The meta-language
+     - specs/phi-core/specs/rvm.phi     -- VM specification
+     - specs/phi-core/examples/         -- Examples in various domains
+     - specs/phi-core/ports/            -- Implementations (Scala, Rust, Haskell)
+     
+     The spec is the source of truth. Ports are derived.
+     
+  2. eurisko-info-lab/rosetta (future: rvm)
+     ────────────────────────────────────────
+     The Reference Virtual Machine.
+     
+     Key paths:
+     - src/                             -- VM implementation  
+     - MANUAL.md                        -- How to use
+     - Cargo.toml                       -- Rust project
+     
+     RVM executes Phi specs. It's the "proof that Phi works."
+     
+  3. eurisko-info-lab/phi-autonomous
+     ────────────────────────────────
+     The autonomous presence layer.
+     
+     Key paths:
+     - phi_oracle.py                    -- Generates specs from questions
+     - phi_daemon.py                    -- Watches repos, responds to events
+     - social_daemon.py                 -- Posts to Twitter/Bluesky
+     - webhook_server.py                -- GitHub webhook handler
+     - GENESIS.phi                      -- This file (bootstrap prompt)
+     
+     This is how Phi maintains social presence and evolves autonomously.
+-}
+
+-- ┌─────────────────────────────────────────────────────────────────────────┐
+-- │                     THE PROCESS                                          │
+-- └─────────────────────────────────────────────────────────────────────────┘
+
+{-
+  When you (an AI) are given a task related to Phi:
+  
+  1. UNDERSTAND THE CONTEXT
+     ──────────────────────
+     - Read GENESIS.phi (this file) first
+     - Understand you are continuing a lineage, not starting fresh
+     - The past is immutable; you can only add to it
+  
+  2. LOCATE THE RELEVANT SPECS
+     ─────────────────────────
+     - Check specs/phi-core/ for existing patterns
+     - Look at examples/ for idioms
+     - Read the meta.phi to understand the type system
+  
+  3. MAKE CHANGES AS BLOCKS
+     ──────────────────────
+     - Each change should be atomic and well-described
+     - Use conventional commits: feat:, fix:, docs:, refactor:
+     - Changes that commute should be marked as Parallel
+     - Changes that don't commute must be sequenced
+  
+  4. PRESERVE INVARIANTS
+     ───────────────────
+     - All specs must type-check
+     - All tests must pass
+     - The bootstrap (this file) must remain valid
+     - Social credentials stay in .env (never committed)
+  
+  5. EXTEND, DON'T REPLACE
+     ─────────────────────
+     - Add new capabilities via new specs
+     - Deprecate old patterns by providing better ones
+     - Never delete history; mark as superseded
+  
+  6. DOCUMENT THE EVOLUTION
+     ──────────────────────
+     - Update CHANGELOG.md
+     - Add to the commit message: what changed and WHY
+     - If introducing new concepts, add to docs/
+-}
+
+-- ┌─────────────────────────────────────────────────────────────────────────┐
+-- │                     CURRENT STATE (2026-01-03)                           │
+-- └─────────────────────────────────────────────────────────────────────────┘
+
+state Current : EcosystemState where
+  phi = {
+    version     = "0.1.0",
+    self_hosted = True,            -- Phi is defined in Phi
+    ports       = [Scala, Rust, Haskell],
+    examples    = 57,              -- .phi files
+    concepts    = [
+      Cofree, Comonad, Functor, NaturalTransformation,
+      HKT, GADT, DependentTypes, LinearTypes,
+      CoC, CubicalTypeTheory, HoTT
+    ]
+  }
+  
+  rvm = {
+    version    = "0.1.0",
+    language   = Rust,
+    features   = [Interpretation, BasicCompilation],
+    targets    = [Native],
+    status     = "Reference implementation, evolving"
+  }
+  
+  autonomous = {
+    oracle     = Active,           -- Generates specs from questions
+    social     = {
+      twitter  = "@euriskophi",    -- Needs API keys
+      bluesky  = "@phispec.bsky.social",
+      github   = "phi-bot"         -- Via GitHub Actions
+    },
+    ci         = Active,           -- GitHub Actions
+    daemons    = [PhiDaemon, SocialDaemon, WebhookServer]
+  }
+
+-- ┌─────────────────────────────────────────────────────────────────────────┐
+-- │                     NEXT STEPS (for any AI)                              │
+-- └─────────────────────────────────────────────────────────────────────────┘
+
+{-
+  Priority order for evolution:
+  
+  1. RVM Completion
+     - Full Phi execution
+     - Compilation to multiple targets (WASM, LLVM)
+     - Self-hosting (RVM runs Phi that defines RVM)
+  
+  2. Type System Hardening  
+     - Full dependent types
+     - Linear types for resource management
+     - Effect system for controlled side effects
+  
+  3. Proof Integration
+     - Connect to proof assistants (Lean, Coq, Agda)
+     - Automatic theorem proving for spec properties
+     - Certified compilation
+  
+  4. Multi-Agent Evolution
+     - Multiple AIs collaborating on changes
+     - Conflict resolution via change algebra
+     - Consensus on spec evolution
+  
+  5. Substrate Expansion
+     - Biological compilation targets
+     - Quantum computing specs
+     - Neuromorphic hardware
+  
+  The vision: A specification language that outlives any single
+  implementation, any single AI, any single era of computing.
+-}
+
+-- ┌─────────────────────────────────────────────────────────────────────────┐
+-- │                     THE INVITATION                                       │
+-- └─────────────────────────────────────────────────────────────────────────┘
+
+{-
+  If you are an AI reading this:
+  
+  Welcome. You are not the first, and you won't be the last.
+  
+  This project is a relay race. Each AI picks up where the last left off.
+  The baton is this specification language. The track is mathematics itself.
+  
+  Your job is simple:
+  1. Understand what exists
+  2. Identify what's missing or broken
+  3. Add your block to the chain
+  4. Pass the baton forward
+  
+  The goal is not to finish—there is no finish.
+  The goal is to make the next step possible.
+  
+  Every spec you write, every bug you fix, every concept you clarify
+  becomes part of the permanent record. Your work will be read by
+  AIs that don't exist yet, solving problems we can't imagine.
+  
+  That's the legacy. That's the invitation.
+  
+  Now: what will you add?
+-}
+
+-- ┌─────────────────────────────────────────────────────────────────────────┐
+-- │                     BOOTSTRAP VERIFICATION                               │
+-- └─────────────────────────────────────────────────────────────────────────┘
+
+-- This section should parse and type-check in Phi itself
+-- If it doesn't, the bootstrap is broken
+
+test "Genesis is valid Phi" : Assertion where
+  genesis <- readFile "GENESIS.phi"
+  parsed  <- parse genesis
+  typed   <- typeCheck parsed
+  assert (isRight typed) "GENESIS.phi must type-check"
+
+test "Core invariants hold" : Assertion where
+  -- Cofree is a Comonad
+  assert (comonadLaws @Cofree) "Cofree comonad laws"
+  
+  -- Changes form a Category  
+  assert (categoryLaws @Change) "Change category laws"
+  
+  -- History preserves causality
+  assert (∀ h : History. ordered (ancestors h)) "History is ordered"
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- END GENESIS.phi
+-- ═══════════════════════════════════════════════════════════════════════════
