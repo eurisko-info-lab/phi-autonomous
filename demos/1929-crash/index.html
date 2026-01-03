@@ -1,0 +1,823 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The 1929 Crash - Economics in Types</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📉</text></svg>">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg: #0a0a0f;
+            --bg-card: #12121a;
+            --border: #1e1e2e;
+            --text: #e4e4ef;
+            --text-dim: #8888a0;
+            --accent: #818cf8;
+            --accent2: #c084fc;
+            --green: #22c55e;
+            --red: #ef4444;
+            --yellow: #eab308;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+        header {
+            padding: 1.5rem 2rem;
+            background: var(--bg-card);
+            border-bottom: 1px solid var(--border);
+            text-align: center;
+        }
+        h1 {
+            font-size: 2rem;
+            background: linear-gradient(135deg, var(--red), var(--yellow));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .subtitle { color: var(--text-dim); margin-top: 0.5rem; }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+        }
+        .card h2 {
+            font-size: 1.1rem;
+            color: var(--accent);
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .chart-container {
+            position: relative;
+            height: 300px;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+            margin-bottom: 1rem;
+        }
+        .btn {
+            padding: 0.5rem 1rem;
+            border: 1px solid var(--border);
+            background: var(--bg);
+            color: var(--text);
+            border-radius: 0.375rem;
+            cursor: pointer;
+            font-size: 0.875rem;
+        }
+        .btn:hover { border-color: var(--accent); }
+        .btn.active { background: var(--accent); border-color: var(--accent); }
+        .btn.danger { border-color: var(--red); color: var(--red); }
+        .btn.danger:hover { background: var(--red); color: white; }
+        
+        .slider-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+        .slider-group label {
+            font-size: 0.75rem;
+            color: var(--text-dim);
+        }
+        input[type="range"] {
+            width: 150px;
+            accent-color: var(--accent);
+        }
+        
+        .timeline {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--border);
+        }
+        .timeline-event {
+            text-align: center;
+            flex: 1;
+            padding: 0.5rem;
+            cursor: pointer;
+            border-radius: 0.5rem;
+            transition: background 0.2s;
+        }
+        .timeline-event:hover { background: var(--bg); }
+        .timeline-event.active { background: var(--accent); }
+        .timeline-event .date { font-size: 0.75rem; color: var(--text-dim); }
+        .timeline-event .label { font-size: 0.875rem; font-weight: 500; }
+        
+        .phi-code {
+            background: #0d1117;
+            border: 1px solid var(--border);
+            border-radius: 0.5rem;
+            padding: 1rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            overflow-x: auto;
+            margin-top: 1rem;
+        }
+        .phi-code .keyword { color: var(--accent); }
+        .phi-code .type { color: var(--accent2); }
+        .phi-code .comment { color: var(--text-dim); }
+        .phi-code .number { color: var(--green); }
+        
+        .metrics {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+        .metric {
+            text-align: center;
+            padding: 1rem;
+            background: var(--bg);
+            border-radius: 0.5rem;
+        }
+        .metric .value {
+            font-size: 1.5rem;
+            font-weight: bold;
+        }
+        .metric .label {
+            font-size: 0.75rem;
+            color: var(--text-dim);
+        }
+        .metric.up .value { color: var(--green); }
+        .metric.down .value { color: var(--red); }
+        
+        .narrative {
+            background: var(--bg);
+            border-left: 3px solid var(--accent);
+            padding: 1rem 1.5rem;
+            margin: 1rem 0;
+            font-style: italic;
+            color: var(--text-dim);
+        }
+        
+        .agent-grid {
+            display: grid;
+            grid-template-columns: repeat(10, 1fr);
+            gap: 4px;
+        }
+        .agent {
+            aspect-ratio: 1;
+            border-radius: 4px;
+            font-size: 0.6rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s;
+        }
+        .agent.buying { background: var(--green); }
+        .agent.holding { background: var(--yellow); }
+        .agent.selling { background: var(--red); }
+        .agent.bankrupt { background: #333; opacity: 0.5; }
+        
+        .legend {
+            display: flex;
+            gap: 1rem;
+            margin-top: 0.5rem;
+            font-size: 0.75rem;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+        .legend-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 3px;
+        }
+        
+        .fullwidth { grid-column: 1 / -1; }
+        
+        @keyframes crash {
+            0% { transform: translateY(0); }
+            50% { transform: translateY(10px); }
+            100% { transform: translateY(0); }
+        }
+        .crashing { animation: crash 0.1s ease-in-out; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>📉 The 1929 Crash</h1>
+        <p class="subtitle">Market dynamics, behavioral economics, and cascade failures — modeled in Φ types</p>
+    </header>
+    
+    <div class="container">
+        <div class="metrics">
+            <div class="metric" id="metric-djia">
+                <div class="value">381.17</div>
+                <div class="label">DJIA Index</div>
+            </div>
+            <div class="metric" id="metric-margin">
+                <div class="value">90%</div>
+                <div class="label">Margin Debt</div>
+            </div>
+            <div class="metric" id="metric-confidence">
+                <div class="value">100%</div>
+                <div class="label">Market Confidence</div>
+            </div>
+            <div class="metric" id="metric-bankruptcies">
+                <div class="value">0</div>
+                <div class="label">Bankruptcies</div>
+            </div>
+        </div>
+        
+        <div class="grid">
+            <div class="card fullwidth">
+                <h2>📈 Dow Jones Industrial Average (1928-1932)</h2>
+                <div class="controls">
+                    <button class="btn active" onclick="setSpeed(1)">1x Speed</button>
+                    <button class="btn" onclick="setSpeed(5)">5x Speed</button>
+                    <button class="btn" onclick="setSpeed(10)">10x Speed</button>
+                    <button class="btn" onclick="toggleSimulation()">▶ Start</button>
+                    <button class="btn danger" onclick="triggerCrash()">⚡ Trigger Crash</button>
+                    <button class="btn" onclick="resetSimulation()">↺ Reset</button>
+                </div>
+                <div class="chart-container">
+                    <canvas id="djiaChart"></canvas>
+                </div>
+                <div class="timeline">
+                    <div class="timeline-event" onclick="jumpTo('boom')">
+                        <div class="date">1928</div>
+                        <div class="label">Roaring 20s</div>
+                    </div>
+                    <div class="timeline-event" onclick="jumpTo('peak')">
+                        <div class="date">Sep 3, 1929</div>
+                        <div class="label">Peak: 381.17</div>
+                    </div>
+                    <div class="timeline-event" onclick="jumpTo('blackthursday')">
+                        <div class="date">Oct 24, 1929</div>
+                        <div class="label">Black Thursday</div>
+                    </div>
+                    <div class="timeline-event" onclick="jumpTo('blacktuesday')">
+                        <div class="date">Oct 29, 1929</div>
+                        <div class="label">Black Tuesday</div>
+                    </div>
+                    <div class="timeline-event" onclick="jumpTo('bottom')">
+                        <div class="date">Jul 8, 1932</div>
+                        <div class="label">Bottom: 41.22</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h2>🎭 Behavioral Economics: Herd Behavior</h2>
+                <p style="font-size: 0.875rem; color: var(--text-dim); margin-bottom: 1rem;">
+                    100 agents with bounded rationality. Watch the cascade.
+                </p>
+                <div class="agent-grid" id="agentGrid"></div>
+                <div class="legend">
+                    <div class="legend-item"><div class="legend-dot" style="background: var(--green)"></div> Buying</div>
+                    <div class="legend-item"><div class="legend-dot" style="background: var(--yellow)"></div> Holding</div>
+                    <div class="legend-item"><div class="legend-dot" style="background: var(--red)"></div> Selling</div>
+                    <div class="legend-item"><div class="legend-dot" style="background: #333"></div> Bankrupt</div>
+                </div>
+                <div class="phi-code">
+<span class="comment">-- Behavioral economics from economics.phi</span>
+<span class="keyword">type</span> <span class="type">BoundedRational</span> = {
+  computationLimit : <span class="type">Nat</span>,
+  satisfice : <span class="type">Utility</span> → <span class="type">Bool</span>,
+  heuristics : <span class="type">List Heuristic</span>
+}
+
+<span class="comment">-- Prospect theory: Loss aversion</span>
+prospectValue pt x = 
+  <span class="keyword">if</span> x >= pt.reference 
+  <span class="keyword">then</span> (x - pt.reference)^<span class="number">0.88</span>
+  <span class="keyword">else</span> <span class="number">-2.25</span> * (pt.reference - x)^<span class="number">0.88</span>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h2>⚖️ Supply & Demand Dynamics</h2>
+                <div class="chart-container">
+                    <canvas id="supplyDemandChart"></canvas>
+                </div>
+                <div class="phi-code">
+<span class="comment">-- Market equilibrium from economics.phi</span>
+<span class="keyword">type</span> <span class="type">Market</span> (good : <span class="type">Type</span>) = {
+  supply : <span class="type">Price</span> → <span class="type">Quantity</span>,
+  demand : <span class="type">Price</span> → <span class="type">Quantity</span>,
+  equilibrium : (<span class="type">Price</span>, <span class="type">Quantity</span>)
+}
+
+findEquilibrium m = 
+  <span class="keyword">let</span> p* = solve (λ p → m.supply p = m.demand p)
+  (p*, m.supply p*)
+                </div>
+            </div>
+            
+            <div class="card">
+                <h2>🎲 Game Theory: Panic Selling</h2>
+                <div class="chart-container">
+                    <canvas id="gameTheoryChart"></canvas>
+                </div>
+                <div class="phi-code">
+<span class="comment">-- Prisoner's dilemma: Sell or Hold?</span>
+panicGame = {
+  strategies = [<span class="type">Hold</span>, <span class="type">Sell</span>],
+  payoff = λ (a1, a2) → <span class="keyword">case</span> (a1, a2) <span class="keyword">of</span>
+    (<span class="type">Hold</span>, <span class="type">Hold</span>) → (<span class="number">0</span>, <span class="number">0</span>)     <span class="comment">-- Both preserve value</span>
+    (<span class="type">Hold</span>, <span class="type">Sell</span>) → (<span class="number">-50</span>, <span class="number">-10</span>) <span class="comment">-- Holder loses more</span>
+    (<span class="type">Sell</span>, <span class="type">Hold</span>) → (<span class="number">-10</span>, <span class="number">-50</span>)
+    (<span class="type">Sell</span>, <span class="type">Sell</span>) → (<span class="number">-30</span>, <span class="number">-30</span>) <span class="comment">-- Nash equilibrium</span>
+}
+                </div>
+            </div>
+            
+            <div class="card">
+                <h2>🏦 Margin Calls Cascade</h2>
+                <div class="slider-group">
+                    <label>Initial Leverage: <span id="leverageValue">10x</span></label>
+                    <input type="range" id="leverageSlider" min="1" max="20" value="10" oninput="updateLeverage()">
+                </div>
+                <div class="chart-container">
+                    <canvas id="marginChart"></canvas>
+                </div>
+                <div class="phi-code">
+<span class="comment">-- Cascade failure mechanism</span>
+<span class="keyword">type</span> <span class="type">MarginCall</span> = {
+  threshold : <span class="type">Float</span>,     <span class="comment">-- Maintenance margin</span>
+  forcedSale : <span class="type">Bool</span>,     <span class="comment">-- Broker sells</span>
+  cascade : <span class="type">MarginCall</span> → <span class="type">List MarginCall</span>
+}
+
+<span class="comment">-- Each forced sale triggers more margin calls</span>
+cascade mc = filter triggered (allPositions)
+                </div>
+            </div>
+            
+            <div class="card">
+                <h2>📊 Utility & Risk Preferences</h2>
+                <div class="chart-container">
+                    <canvas id="utilityChart"></canvas>
+                </div>
+                <div class="phi-code">
+<span class="comment">-- Risk preferences shift during crash</span>
+<span class="keyword">type</span> <span class="type">RiskPreference</span> =
+  | <span class="type">RiskAverse</span>  { concave }  <span class="comment">-- Normal times</span>
+  | <span class="type">RiskLoving</span> { convex }   <span class="comment">-- Bubble mania</span>
+  | <span class="type">Panic</span>      { flight }   <span class="comment">-- Crash mode</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card fullwidth">
+            <h2>📜 The Narrative</h2>
+            <div id="narrative" class="narrative">
+                The Roaring Twenties: Unprecedented prosperity. New technologies (radio, automobiles) fuel optimism. 
+                Stock prices climb as speculation becomes a national pastime. Margin buying lets anyone become an investor — 
+                borrowing 90% of the purchase price. The market becomes a game theory experiment where everyone assumes 
+                prices only go up...
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // State
+        let simulationRunning = false;
+        let simulationSpeed = 1;
+        let currentTick = 0;
+        let maxTick = 500;
+        let crashTriggered = false;
+        
+        // Historical DJIA approximation
+        const historicalData = generateHistoricalData();
+        
+        function generateHistoricalData() {
+            const data = [];
+            // 1928-1929 boom
+            for (let i = 0; i < 200; i++) {
+                const base = 200 + (i / 200) * 181;
+                const noise = Math.random() * 10 - 5;
+                data.push(Math.max(0, base + noise + Math.sin(i/10) * 5));
+            }
+            // Peak at 381.17
+            // Crash
+            for (let i = 0; i < 100; i++) {
+                const crashCurve = 381 * Math.exp(-i / 30);
+                const volatility = Math.random() * 30 - 15;
+                data.push(Math.max(40, crashCurve + volatility));
+            }
+            // Depression bottom
+            for (let i = 0; i < 200; i++) {
+                const base = 41 + Math.random() * 20;
+                data.push(base);
+            }
+            return data;
+        }
+        
+        // Agents
+        const agents = [];
+        for (let i = 0; i < 100; i++) {
+            agents.push({
+                state: 'buying',
+                wealth: 1000 + Math.random() * 9000,
+                leverage: 5 + Math.random() * 10,
+                fearThreshold: 0.3 + Math.random() * 0.4,
+                herdInfluence: 0.3 + Math.random() * 0.5
+            });
+        }
+        
+        // Initialize agent grid
+        function renderAgents() {
+            const grid = document.getElementById('agentGrid');
+            grid.innerHTML = '';
+            agents.forEach((agent, i) => {
+                const div = document.createElement('div');
+                div.className = `agent ${agent.state}`;
+                div.title = `Agent ${i}: ${agent.state}\nWealth: $${Math.round(agent.wealth)}`;
+                grid.appendChild(div);
+            });
+        }
+        renderAgents();
+        
+        // Charts
+        const djiaCtx = document.getElementById('djiaChart').getContext('2d');
+        const djiaChart = new Chart(djiaCtx, {
+            type: 'line',
+            data: {
+                labels: Array(maxTick).fill('').map((_, i) => {
+                    if (i < 200) return '1928';
+                    if (i < 210) return 'Sep 1929';
+                    if (i < 230) return 'Oct 1929';
+                    if (i < 300) return '1930';
+                    return '1931-32';
+                }),
+                datasets: [{
+                    label: 'DJIA',
+                    data: [],
+                    borderColor: '#818cf8',
+                    backgroundColor: 'rgba(129, 140, 248, 0.1)',
+                    fill: true,
+                    tension: 0.1,
+                    pointRadius: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    y: { 
+                        min: 0, 
+                        max: 400,
+                        grid: { color: '#1e1e2e' },
+                        ticks: { color: '#8888a0' }
+                    },
+                    x: { 
+                        grid: { display: false },
+                        ticks: { color: '#8888a0', maxTicksLimit: 10 }
+                    }
+                }
+            }
+        });
+        
+        // Supply/Demand chart
+        const sdCtx = document.getElementById('supplyDemandChart').getContext('2d');
+        const supplyDemandChart = new Chart(sdCtx, {
+            type: 'line',
+            data: {
+                labels: Array(100).fill('').map((_, i) => i),
+                datasets: [
+                    {
+                        label: 'Supply',
+                        data: Array(100).fill(0).map((_, i) => 20 + i * 0.6),
+                        borderColor: '#22c55e',
+                        tension: 0.4,
+                        pointRadius: 0
+                    },
+                    {
+                        label: 'Demand',
+                        data: Array(100).fill(0).map((_, i) => 80 - i * 0.6),
+                        borderColor: '#ef4444',
+                        tension: 0.4,
+                        pointRadius: 0
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { position: 'top', labels: { color: '#8888a0' } } },
+                scales: {
+                    y: { grid: { color: '#1e1e2e' }, ticks: { color: '#8888a0' } },
+                    x: { grid: { display: false }, ticks: { display: false } }
+                }
+            }
+        });
+        
+        // Game theory chart
+        const gtCtx = document.getElementById('gameTheoryChart').getContext('2d');
+        const gameTheoryChart = new Chart(gtCtx, {
+            type: 'bar',
+            data: {
+                labels: ['Hold/Hold', 'Hold/Sell', 'Sell/Hold', 'Sell/Sell'],
+                datasets: [
+                    {
+                        label: 'Player 1',
+                        data: [0, -50, -10, -30],
+                        backgroundColor: '#818cf8'
+                    },
+                    {
+                        label: 'Player 2',
+                        data: [0, -10, -50, -30],
+                        backgroundColor: '#c084fc'
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { position: 'top', labels: { color: '#8888a0' } } },
+                scales: {
+                    y: { grid: { color: '#1e1e2e' }, ticks: { color: '#8888a0' } },
+                    x: { grid: { display: false }, ticks: { color: '#8888a0' } }
+                }
+            }
+        });
+        
+        // Margin chart
+        const marginCtx = document.getElementById('marginChart').getContext('2d');
+        const marginChart = new Chart(marginCtx, {
+            type: 'line',
+            data: {
+                labels: Array(50).fill('').map((_, i) => `T+${i}`),
+                datasets: [
+                    {
+                        label: 'Portfolio Value',
+                        data: [],
+                        borderColor: '#818cf8',
+                        tension: 0.1,
+                        pointRadius: 0
+                    },
+                    {
+                        label: 'Margin Requirement',
+                        data: Array(50).fill(25),
+                        borderColor: '#ef4444',
+                        borderDash: [5, 5],
+                        tension: 0,
+                        pointRadius: 0
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { position: 'top', labels: { color: '#8888a0' } } },
+                scales: {
+                    y: { min: 0, max: 150, grid: { color: '#1e1e2e' }, ticks: { color: '#8888a0' } },
+                    x: { grid: { display: false }, ticks: { color: '#8888a0' } }
+                }
+            }
+        });
+        
+        // Utility chart
+        const utilityCtx = document.getElementById('utilityChart').getContext('2d');
+        const utilityChart = new Chart(utilityCtx, {
+            type: 'line',
+            data: {
+                labels: Array(100).fill('').map((_, i) => i - 50),
+                datasets: [
+                    {
+                        label: 'Prospect Theory Value',
+                        data: Array(100).fill(0).map((_, i) => {
+                            const x = i - 50;
+                            if (x >= 0) return Math.pow(x, 0.88);
+                            return -2.25 * Math.pow(-x, 0.88);
+                        }),
+                        borderColor: '#c084fc',
+                        tension: 0.4,
+                        pointRadius: 0,
+                        fill: false
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { 
+                    legend: { display: false },
+                    annotation: {
+                        annotations: {
+                            line1: {
+                                type: 'line',
+                                yMin: 0, yMax: 0,
+                                borderColor: '#8888a0',
+                                borderDash: [5, 5]
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: { grid: { color: '#1e1e2e' }, ticks: { color: '#8888a0' } },
+                    x: { grid: { color: '#1e1e2e' }, ticks: { color: '#8888a0', maxTicksLimit: 5 } }
+                }
+            }
+        });
+        
+        // Simulation
+        function tick() {
+            if (!simulationRunning || currentTick >= maxTick) return;
+            
+            const price = historicalData[currentTick];
+            djiaChart.data.datasets[0].data.push(price);
+            djiaChart.update('none');
+            
+            // Update metrics
+            updateMetrics(price);
+            
+            // Update agents
+            updateAgents(price, currentTick);
+            
+            // Update supply/demand based on phase
+            updateSupplyDemand(currentTick);
+            
+            // Update margin cascade
+            updateMarginChart(currentTick);
+            
+            // Update narrative
+            updateNarrative(currentTick);
+            
+            currentTick++;
+            
+            setTimeout(tick, 50 / simulationSpeed);
+        }
+        
+        function updateMetrics(price) {
+            const djiaEl = document.getElementById('metric-djia');
+            djiaEl.querySelector('.value').textContent = price.toFixed(2);
+            djiaEl.className = 'metric ' + (price > 200 ? 'up' : 'down');
+            
+            const marginDebt = currentTick < 200 ? 90 : Math.max(10, 90 - (currentTick - 200) * 0.5);
+            document.getElementById('metric-margin').querySelector('.value').textContent = marginDebt.toFixed(0) + '%';
+            
+            const confidence = currentTick < 200 ? 100 : Math.max(5, 100 - (currentTick - 200) * 0.8);
+            const confEl = document.getElementById('metric-confidence');
+            confEl.querySelector('.value').textContent = confidence.toFixed(0) + '%';
+            confEl.className = 'metric ' + (confidence > 50 ? 'up' : 'down');
+            
+            const bankruptcies = agents.filter(a => a.state === 'bankrupt').length;
+            document.getElementById('metric-bankruptcies').querySelector('.value').textContent = bankruptcies;
+        }
+        
+        function updateAgents(price, tick) {
+            const priceChange = tick > 0 ? (price - historicalData[Math.max(0, tick - 1)]) / historicalData[Math.max(0, tick - 1)] : 0;
+            const sellingRatio = agents.filter(a => a.state === 'selling').length / agents.length;
+            
+            agents.forEach(agent => {
+                if (agent.state === 'bankrupt') return;
+                
+                // Herd influence + fear
+                const herdPressure = sellingRatio * agent.herdInfluence;
+                const fear = priceChange < -0.02 ? Math.abs(priceChange) * 10 : 0;
+                const panicLevel = herdPressure + fear;
+                
+                // Update wealth based on position and leverage
+                if (agent.state === 'buying' || agent.state === 'holding') {
+                    agent.wealth *= (1 + priceChange * agent.leverage);
+                }
+                
+                // State transitions
+                if (agent.wealth <= 0) {
+                    agent.state = 'bankrupt';
+                } else if (panicLevel > agent.fearThreshold) {
+                    agent.state = 'selling';
+                } else if (tick < 200 && Math.random() < 0.1) {
+                    agent.state = 'buying';
+                } else if (agent.state === 'buying' && Math.random() < 0.05) {
+                    agent.state = 'holding';
+                }
+            });
+            
+            renderAgents();
+        }
+        
+        function updateSupplyDemand(tick) {
+            const shift = tick < 200 ? 0 : Math.min(40, (tick - 200) * 0.3);
+            
+            supplyDemandChart.data.datasets[0].data = Array(100).fill(0).map((_, i) => 20 + i * 0.6 + shift);
+            supplyDemandChart.data.datasets[1].data = Array(100).fill(0).map((_, i) => 80 - i * 0.6 - shift);
+            supplyDemandChart.update('none');
+        }
+        
+        function updateMarginChart(tick) {
+            const leverage = parseInt(document.getElementById('leverageSlider').value);
+            const priceRatio = historicalData[tick] / 381;
+            const portfolioValue = 100 * leverage * priceRatio;
+            
+            marginChart.data.datasets[0].data.push(Math.max(0, portfolioValue));
+            if (marginChart.data.datasets[0].data.length > 50) {
+                marginChart.data.datasets[0].data.shift();
+            }
+            marginChart.update('none');
+        }
+        
+        function updateNarrative(tick) {
+            const narrative = document.getElementById('narrative');
+            if (tick < 50) {
+                narrative.textContent = "The Roaring Twenties: Unprecedented prosperity. New technologies (radio, automobiles) fuel optimism. Stock prices climb as speculation becomes a national pastime. Margin buying lets anyone become an investor — borrowing 90% of the purchase price.";
+            } else if (tick < 150) {
+                narrative.textContent = "Speculation intensifies. Everyone from shoeshine boys to bankers is in the market. 'Irrational exuberance' — but in game theory terms, it's rational if you believe others will keep buying. The Nash equilibrium has shifted to aggressive speculation.";
+            } else if (tick < 200) {
+                narrative.textContent = "September 1929: The market hits 381.17. Warning signs appear — the Fed raises rates, some insiders start selling. But bounded rationality means most investors satisfice with 'it always goes up.'";
+            } else if (tick < 220) {
+                narrative.textContent = "⚡ BLACK THURSDAY (Oct 24): Panic selling begins. The game theory flips — now NOT selling means losing more. Margin calls trigger forced liquidations. The cascade begins. Each sale triggers more margin calls...";
+            } else if (tick < 240) {
+                narrative.textContent = "💥 BLACK TUESDAY (Oct 29): 16 million shares traded. The prisoner's dilemma is in full force — everyone selling is individually rational but collectively catastrophic. Loss aversion from prospect theory makes the panic worse.";
+            } else if (tick < 350) {
+                narrative.textContent = "The Depression unfolds. Banks fail. The DJIA loses 89% from peak to trough. The market clears at a new equilibrium, but at devastating human cost. The mechanisms typed in economics.phi play out in reality.";
+            } else {
+                narrative.textContent = "July 1932: The bottom at 41.22. The new equilibrium. Recovery will take 25 years. The crash reveals the fragility of leveraged systems and the power of behavioral cascades. Every concept in economics.phi was on display.";
+            }
+        }
+        
+        function toggleSimulation() {
+            simulationRunning = !simulationRunning;
+            const btn = document.querySelector('.controls .btn:nth-child(4)');
+            btn.textContent = simulationRunning ? '⏸ Pause' : '▶ Start';
+            if (simulationRunning) tick();
+        }
+        
+        function setSpeed(speed) {
+            simulationSpeed = speed;
+            document.querySelectorAll('.controls .btn').forEach((btn, i) => {
+                if (i < 3) btn.classList.toggle('active', parseInt(btn.textContent) === speed);
+            });
+        }
+        
+        function triggerCrash() {
+            if (currentTick < 200) {
+                currentTick = 200;
+                djiaChart.data.datasets[0].data = historicalData.slice(0, 200);
+                djiaChart.update();
+            }
+            document.body.classList.add('crashing');
+            setTimeout(() => document.body.classList.remove('crashing'), 500);
+        }
+        
+        function resetSimulation() {
+            simulationRunning = false;
+            currentTick = 0;
+            djiaChart.data.datasets[0].data = [];
+            djiaChart.update();
+            marginChart.data.datasets[0].data = [];
+            marginChart.update();
+            
+            agents.forEach(agent => {
+                agent.state = 'buying';
+                agent.wealth = 1000 + Math.random() * 9000;
+            });
+            renderAgents();
+            
+            updateMetrics(200);
+            document.querySelector('.controls .btn:nth-child(4)').textContent = '▶ Start';
+        }
+        
+        function jumpTo(phase) {
+            const positions = { boom: 50, peak: 200, blackthursday: 210, blacktuesday: 230, bottom: 450 };
+            currentTick = positions[phase] || 0;
+            djiaChart.data.datasets[0].data = historicalData.slice(0, currentTick);
+            djiaChart.update();
+            updateMetrics(historicalData[currentTick]);
+            updateNarrative(currentTick);
+            
+            document.querySelectorAll('.timeline-event').forEach(el => el.classList.remove('active'));
+            event.target.closest('.timeline-event').classList.add('active');
+        }
+        
+        function updateLeverage() {
+            const value = document.getElementById('leverageSlider').value;
+            document.getElementById('leverageValue').textContent = value + 'x';
+        }
+        
+        // Initial state
+        updateMetrics(200);
+    </script>
+</body>
+</html>
