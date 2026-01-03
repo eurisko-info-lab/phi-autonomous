@@ -32,3 +32,6 @@ Thumbs.db
 *.tmp
 *.bak
 .env
+.bsp/
+.metals/
+.scala-build/

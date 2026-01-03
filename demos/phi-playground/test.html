@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WASM Test</title>
+    <style>
+        body { font-family: monospace; padding: 20px; background: #1a1a2e; color: #eee; }
+        pre { background: #16213e; padding: 15px; border-radius: 5px; white-space: pre-wrap; }
+        button { padding: 10px 20px; margin: 10px 5px 10px 0; cursor: pointer; }
+        .success { color: #4ade80; }
+        .error { color: #f87171; }
+    </style>
+</head>
+<body>
+    <h1>🔬 RosettaVM WASM Test</h1>
+    <pre id="output">Initializing...</pre>
+    <div>
+        <button onclick="runCalc()">Test calculate()</button>
+        <button onclick="runEval()">Test evaluate()</button>
+        <button onclick="clearLog()">Clear</button>
+    </div>
+    
+    <script type="module">
+        const output = document.getElementById('output');
+        let wasmReady = false;
+        let mod = null;
+        
+        function log(msg, type = '') {
+            const span = document.createElement('span');
+            span.className = type;
+            span.textContent = msg + '\n';
+            output.appendChild(span);
+            output.scrollTop = output.scrollHeight;
+            console.log(msg);
+        }
+        
+        window.clearLog = () => { output.textContent = ''; };
+        
+        async function init() {
+            try {
+                log('📦 Loading WASM module...');
+                mod = await import('./wasm/rosettavm.js');
+                log('✓ Module loaded: ' + Object.keys(mod).join(', '), 'success');
+                
+                log('\n🚀 Initializing WASM...');
+                await mod.default();
+                log('✓ WASM initialized', 'success');
+                
+                const ver = mod.version();
+                log('✓ Version: ' + ver, 'success');
+                
+                wasmReady = true;
+                log('\n✅ Ready! Click buttons to test.', 'success');
+                
+            } catch (e) {
+                log('❌ ERROR: ' + e.message, 'error');
+                log('Stack: ' + e.stack, 'error');
+            }
+        }
+        
+        window.runCalc = () => {
+            if (!wasmReady) { log('⚠️ WASM not ready', 'error'); return; }
+            log('\n--- Testing calculate("3 + 4") ---');
+            try {
+                const result = mod.calculate("3 + 4");
+                log('Result: ' + result, 'success');
+            } catch (e) {
+                log('Error: ' + e, 'error');
+            }
+        };
+        
+        window.runEval = () => {
+            if (!wasmReady) { log('⚠️ WASM not ready', 'error'); return; }
+            const code = `fn main() {\n    push 6\n    push 7\n    mul\n    halt\n}`;
+            log('\n--- Testing evaluate() with RVM ---');
+            log('Code:\n' + code);
+            try {
+                const result = mod.evaluate(code);
+                log('Result: ' + result, 'success');
+            } catch (e) {
+                log('Error: ' + e, 'error');
+            }
+        };
+        
+        init();
+    </script>
+</body>
+</html>

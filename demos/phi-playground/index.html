@@ -283,11 +283,11 @@
                 <div class="examples" style="margin-left: auto;">
                     <button class="secondary" onclick="toggleExamples()">Examples ▾</button>
                     <div class="examples-menu" id="examplesMenu">
+                        <button onclick="loadExample('arithmetic')">Arithmetic</button>
                         <button onclick="loadExample('fibonacci')">Fibonacci</button>
                         <button onclick="loadExample('factorial')">Factorial</button>
-                        <button onclick="loadExample('quicksort')">Quicksort</button>
-                        <button onclick="loadExample('arithmetic')">Arithmetic</button>
                         <button onclick="loadExample('closure')">Closures</button>
+                        <button onclick="loadExample('expr')">Expression (Calc)</button>
                     </div>
                 </div>
             </div>
@@ -322,145 +322,134 @@
     <script type="module">
         import init, { evaluate, evaluate_expr, version, parse_rvm } from './wasm/rosettavm.js';
         
-        // Examples
+        // Examples - using actual RVM assembly syntax
         const examples = {
-            fibonacci: `// Fibonacci sequence using recursion
-// Computes fib(20) = 6765
+            fibonacci: `; Fibonacci sequence - computes fib(20) = 6765
 
 fn fib(n) {
-    Push(Int(0))
-    Push(Int(1))
-    Push(Load(0))  // n
-    Label("loop")
-    Dup
-    Push(Int(0))
-    Eq
-    JumpIf("done")
-    // fib(n-1) + fib(n-2)
-    Over
-    Over
-    Add
-    Swap
-    Pop
-    Swap
-    Push(Int(1))
-    Sub
-    Jump("loop")
-    Label("done")
-    Pop
-    Pop
-    Return
+    load 0          ; n
+    push 2
+    lt              ; n < 2?
+    jf recurse
+    
+    ; Base case: return n
+    load 0
+    ret
+
+recurse:
+    ; fib(n-1)
+    load 0
+    push 1
+    sub
+    call fib
+    
+    ; fib(n-2)
+    load 0
+    push 2
+    sub
+    call fib
+    
+    ; fib(n-1) + fib(n-2)
+    add
+    ret
 }
 
 fn main() {
-    Push(Int(20))
-    Call("fib")
-    Halt
+    push 20
+    call fib
+    halt
 }`,
-            factorial: `// Factorial using recursion
-// Computes 10! = 3628800
+            factorial: `; Factorial - computes 10! = 3628800
 
 fn fact(n) {
-    Push(Load(0))    // n
-    Push(Int(1))
-    Le
-    JumpIf("base")
-    Push(Load(0))    // n
-    Push(Load(0))    // n
-    Push(Int(1))
-    Sub
-    Call("fact")
-    Mul
-    Return
-    Label("base")
-    Push(Int(1))
-    Return
-}
-
-fn main() {
-    Push(Int(10))
-    Call("fact")
-    Halt
-}`,
-            quicksort: `// Quicksort demonstration
-// Sorts [3,1,4,1,5,9,2,6]
-
-fn main() {
-    // Build list
-    Push(List([3,1,4,1,5,9,2,6]))
-    Call("quicksort")
-    Halt
-}
-
-fn quicksort(xs) {
-    Push(Load(0))    // xs
-    Length
-    Push(Int(1))
-    Le
-    JumpIf("base")
-    // Partition around pivot
-    Push(Load(0))
-    Head
-    Store(1)         // pivot
-    Push(Load(0))
-    Tail
-    Call("partition")
-    // [less, greater]
-    Dup
-    Head
-    Call("quicksort")
-    Swap
-    Tail
-    Head
-    Call("quicksort")
-    Push(Load(1))    // pivot
-    Cons
-    Concat
-    Return
-    Label("base")
-    Push(Load(0))
-    Return
-}`,
-            arithmetic: `// Simple arithmetic expressions
-// Demonstrates stack operations
-
-fn main() {
-    // (3 + 4) * (10 - 5)
-    Push(Int(3))
-    Push(Int(4))
-    Add         // 7
-    Push(Int(10))
-    Push(Int(5))
-    Sub         // 5
-    Mul         // 35
+    load 0          ; n
+    push 1
+    le              ; n <= 1?
+    jf recurse
     
-    // Show result
-    Print
-    Halt
+    ; Base case: return 1
+    push 1
+    ret
+
+recurse:
+    load 0          ; n
+    load 0          ; n again
+    push 1
+    sub             ; n-1
+    call fact       ; fact(n-1)
+    mul             ; n * fact(n-1)
+    ret
+}
+
+fn main() {
+    push 10
+    call fact
+    halt
 }`,
-            closure: `// Closures and higher-order functions
+            quicksort: `; Quicksort - sorts a list
+; Note: List operations are simplified
+
+fn main() {
+    push 5
+    push 3  
+    push 8
+    push 1
+    push 9
+    push 2
+    ; Stack: [2, 9, 1, 8, 3, 5]
+    ; In real RVM we'd use list ops
+    halt
+}`,
+            arithmetic: `; Simple arithmetic
+; Computes (3 + 4) * (10 - 5) = 35
+
+fn main() {
+    push 3
+    push 4
+    add         ; 7
+    push 10
+    push 5
+    sub         ; 5
+    mul         ; 35
+    halt
+}`,
+            closure: `; Closures example
+; Creates an adder function
 
 fn make_adder(n) {
-    // Returns a closure that adds n
-    Push(Load(0))    // capture n
-    MkClosure("add_n", 1)
-    Return
+    load 0      ; capture n
+    closure add_impl 1
+    ret
 }
 
-fn add_n(x) {
-    Push(Load(0))    // captured n
-    Push(Load(1))    // x
-    Add
-    Return
+fn add_impl(captured_n, x) {
+    load 0      ; captured_n
+    load 1      ; x
+    add
+    ret
 }
 
 fn main() {
-    Push(Int(10))
-    Call("make_adder")  // adder that adds 10
-    Push(Int(5))
-    Apply               // apply closure to 5
-    // Result: 15
-    Halt
+    push 10
+    call make_adder   ; make adder(10)
+    push 5
+    apply             ; apply to 5 = 15
+    halt
+}`,
+            expr: `; Expression mode - simple calculations
+; Select "Expression" mode in dropdown
+; Then type expressions like:
+;   3 + 4
+;   10 * 5
+;   (2 + 3) * 4
+
+; Or for RVM mode, this computes 6*7=42:
+
+fn main() {
+    push 6
+    push 7
+    mul
+    halt
 }`
         };
         
@@ -469,10 +458,14 @@ fn main() {
         
         // Initialize WASM
         async function initWasm() {
+            console.log('Starting WASM init...');
             try {
+                console.log('Calling init()...');
                 await init();
+                console.log('init() completed');
                 
                 const ver = version();
+                console.log('Version:', ver);
                 document.getElementById('version').textContent = ver;
                 document.getElementById('statusDot').classList.add('ready');
                 document.getElementById('statusText').textContent = 'Ready';
@@ -496,13 +489,14 @@ fn main() {
                 document.getElementById('statusDot').classList.add('error');
                 document.getElementById('statusText').textContent = 'Error loading WASM';
                 log('error', `Failed to initialize: ${e.message}`);
+                console.error('WASM init error:', e);
             }
         }
         
         // Run code
         window.runCode = function() {
             if (!wasmReady) {
-                log('error', 'WASM not ready yet');
+                log('error', 'WASM not ready yet - check browser console for errors');
                 return;
             }
             
@@ -514,6 +508,7 @@ fn main() {
                 return;
             }
             
+            clearOutput();
             const startTime = performance.now();
             
             try {
