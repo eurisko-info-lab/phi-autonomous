@@ -7,7 +7,7 @@ on:
 jobs:
   announce:
     runs-on: ubuntu-latest
-    continue-on-error: true  # Don't fail the build if tweet fails
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
         with:
@@ -16,9 +16,15 @@ jobs:
       - name: Get commit info
         id: commit
         run: |
-          echo "message=$(git log -1 --pretty=%s | head -c 200)" >> $GITHUB_OUTPUT
-          echo "author=$(git log -1 --pretty=%an)" >> $GITHUB_OUTPUT
-          echo "files=$(git diff --name-only HEAD~1 HEAD 2>/dev/null | head -5 | tr '\n' ' ')" >> $GITHUB_OUTPUT
+          MSG=$(git log -1 --pretty=%s | head -c 200)
+          echo "message=$MSG" >> $GITHUB_OUTPUT
+          FILES=$(git diff --name-only HEAD~1 HEAD 2>/dev/null | head -5 | tr '\n' ' ')
+          echo "files=$FILES" >> $GITHUB_OUTPUT
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
       
       - name: Tweet announcement
         continue-on-error: true
@@ -27,24 +33,23 @@ jobs:
           TWITTER_API_SECRET: ${{ secrets.TWITTER_API_SECRET }}
           TWITTER_ACCESS_TOKEN: ${{ secrets.TWITTER_ACCESS_TOKEN }}
           TWITTER_ACCESS_SECRET: ${{ secrets.TWITTER_ACCESS_SECRET }}
+          COMMIT_MSG: ${{ steps.commit.outputs.message }}
+          COMMIT_FILES: ${{ steps.commit.outputs.files }}
+          REPO: ${{ github.repository }}
         run: |
-          # Skip if no Twitter credentials
           if [ -z "$TWITTER_API_KEY" ]; then
-            echo "⏭️ Skipping tweet - no Twitter credentials configured"
+            echo "Skipping - no Twitter credentials"
             exit 0
           fi
-          
           pip install tweepy -q
-          python3 << 'EOF'
-          import tweepy
-          import os
-          import sys
-          
+          python3 -c "
+          import tweepy, os, sys
+
           api_key = os.environ.get('TWITTER_API_KEY', '')
           if not api_key:
-              print("⏭️ No Twitter credentials - skipping")
+              print('No credentials')
               sys.exit(0)
-          
+
           try:
               client = tweepy.Client(
                   consumer_key=api_key,
@@ -52,24 +57,12 @@ jobs:
                   access_token=os.environ['TWITTER_ACCESS_TOKEN'],
                   access_token_secret=os.environ['TWITTER_ACCESS_SECRET']
               )
-              
-              commit_msg = """${{ steps.commit.outputs.message }}"""
-              files = """${{ steps.commit.outputs.files }}"""
-              repo = "${{ github.repository }}"
-              
-              tweet = f"""🔄 Push to {repo}:
-
-{commit_msg[:150]}
-
-Files: {files[:60]}
-
-https://github.com/{repo}
-
-#Phi #MetaLanguage"""
-              
+              msg = os.environ.get('COMMIT_MSG', '')[:150]
+              files = os.environ.get('COMMIT_FILES', '')[:60]
+              repo = os.environ.get('REPO', '')
+              tweet = f'Push to {repo}: {msg}'
               response = client.create_tweet(text=tweet[:280])
-              print(f"✅ Tweeted: https://twitter.com/i/status/{response.data['id']}")
+              print(f'Tweeted: https://twitter.com/i/status/{response.data[\"id\"]}')
           except Exception as e:
-              print(f"⚠️ Tweet failed: {e}")
-              # Don't fail the workflow
-          EOF
+              print(f'Tweet failed: {e}')
+          "
