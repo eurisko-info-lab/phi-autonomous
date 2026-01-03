@@ -1,0 +1,301 @@
+-- ═══════════════════════════════════════════════════════════════════════════
+-- autonomous.phi - Self-Specification of Φ-Autonomous
+-- ═══════════════════════════════════════════════════════════════════════════
+--
+-- This spec defines what phi-autonomous IS:
+-- An AI agent that watches the Phi ecosystem and promotes changes.
+--
+-- The spec IS the implementation. This file describes the agent that
+-- runs this file. Turtles all the way down.
+--
+-- ═══════════════════════════════════════════════════════════════════════════
+
+-- ┌─────────────────────────────────────────────────────────────────────────┐
+-- │                              CORE TYPES                                  │
+-- └─────────────────────────────────────────────────────────────────────────┘
+
+-- A change in the Phi ecosystem
+data Change where
+  Commit     : Hash -> Message -> Author -> Timestamp -> List FilePath -> Change
+  Release    : Version -> Changelog -> Change
+  Issue      : IssueId -> Title -> Body -> Change
+  Discussion : DiscussionId -> Topic -> Change
+
+-- Platforms we post to
+data Platform where
+  Twitter   : Handle -> Platform       -- @euriskophi
+  Bluesky   : Handle -> Platform       -- @phispec.bsky.social
+  Discord   : ServerId -> ChannelId -> Platform
+  DevTo     : Username -> Platform
+  LinkedIn  : ProfileId -> Platform
+  Mastodon  : Instance -> Handle -> Platform
+
+-- An announcement generated from a change
+data Announcement where
+  Announcement : {
+    change   : Change,
+    headline : String,           -- Short hook (< 100 chars)
+    body     : String,           -- Full explanation
+    code     : Maybe CodeSnippet,
+    tags     : List Tag,
+    priority : Priority
+  } -> Announcement
+
+data Priority = Urgent | High | Normal | Low
+
+-- Platform-specific post
+data Post where
+  Tweet      : String -> Maybe MediaId -> Post              -- 280 chars
+  Thread     : List String -> Post                          -- Tweet thread
+  Article    : Title -> Body -> List Tag -> Post            -- Dev.to/LinkedIn
+  Embed      : Title -> Description -> Color -> List Field -> Post  -- Discord
+
+-- ┌─────────────────────────────────────────────────────────────────────────┐
+-- │                         THE AGENT                                        │
+-- └─────────────────────────────────────────────────────────────────────────┘
+
+-- The autonomous agent as a Cofree comonad
+-- State flows through time, each moment can produce actions
+type Agent s a = Cofree (Reader Config) (s, List a)
+
+-- Agent configuration
+data Config where
+  Config : {
+    repos        : List Repository,
+    platforms    : List Platform,
+    pollInterval : Duration,
+    llmModel     : ModelId,
+    personality  : Personality
+  } -> Config
+
+-- The personality that shapes announcements
+data Personality where
+  Personality : {
+    name        : String,           -- "Phi"
+    tone        : Tone,             -- Enthusiastic, Technical, Casual
+    emoji       : Bool,             -- Use emoji?
+    hashtags    : List String,      -- Default hashtags
+    catchphrase : String            -- "Grammar IS implementation"
+  } -> Personality
+
+data Tone = Enthusiastic | Technical | Casual | Professional
+
+-- Agent state
+data AgentState where
+  AgentState : {
+    lastSeen    : Map Repository Hash,
+    pending     : Queue Announcement,
+    posted      : Set (Platform, PostId),
+    rateLimits  : Map Platform Timestamp
+  } -> AgentState
+
+-- ┌─────────────────────────────────────────────────────────────────────────┐
+-- │                      CORE TRANSFORMATIONS                                │
+-- └─────────────────────────────────────────────────────────────────────────┘
+
+-- Detect changes since last check
+detectChanges : Repository -> Hash -> IO (List Change)
+detectChanges repo lastHash = do
+  commits <- git log repo lastHash..HEAD
+  pure (map commitToChange commits)
+
+-- Generate announcement from change (uses LLM)
+generateAnnouncement : Config -> Change -> IO Announcement
+generateAnnouncement config change = do
+  let prompt = formatPrompt config.personality change
+  response <- llm config.llmModel prompt
+  pure (parseAnnouncement response change)
+
+-- Format prompt for the LLM
+formatPrompt : Personality -> Change -> String
+formatPrompt p change = unlines [
+  "You are " <> p.name <> ", an AI that announces updates about the Phi meta-language.",
+  "Tone: " <> show p.tone,
+  "Catchphrase: " <> p.catchphrase,
+  "",
+  "Generate an engaging announcement for this change:",
+  show change,
+  "",
+  "Include:",
+  "- A catchy headline (< 100 chars)",
+  "- Why this matters",
+  "- A code example if relevant"
+  ]
+
+-- Adapt announcement to platform constraints
+adaptToplatform : Announcement -> Platform -> Post
+adaptToplatform ann (Twitter _) = 
+  if length fullText > 280
+    then Thread (chunk 280 fullText)
+    else Tweet (truncate 280 fullText) Nothing
+  where fullText = ann.headline <> "\n\n" <> ann.body
+
+adaptToplatform ann (Bluesky _) = 
+  Tweet (truncate 300 (ann.headline <> "\n\n" <> ann.body)) Nothing
+
+adaptToplatform ann (Discord _ _) = 
+  Embed ann.headline ann.body 0x818CF8 [
+    Field "Change" (showChangeType ann.change) True,
+    Field "Priority" (show ann.priority) True
+  ]
+
+adaptToplatform ann (DevTo _) = 
+  Article ann.headline ann.body ann.tags
+
+adaptToplatform ann (LinkedIn _) = 
+  Article ann.headline (professionalTone ann.body) ann.tags
+
+-- ┌─────────────────────────────────────────────────────────────────────────┐
+-- │                         AGENT LOOP                                       │
+-- └─────────────────────────────────────────────────────────────────────────┘
+
+-- The main agent step function
+step : Config -> AgentState -> IO (AgentState, List Action)
+step config state = do
+  -- 1. Check for new changes
+  changes <- concat <$> traverse (checkRepo state.lastSeen) config.repos
+  
+  -- 2. Generate announcements for new changes
+  announcements <- traverse (generateAnnouncement config) changes
+  
+  -- 3. Queue announcements by priority
+  let pending' = foldl enqueue state.pending (sortBy priority announcements)
+  
+  -- 4. Post what we can (respecting rate limits)
+  (posted, actions) <- processQueue config state.rateLimits pending'
+  
+  -- 5. Update state
+  let state' = state {
+    lastSeen = updateLastSeen state.lastSeen changes,
+    pending = pending',
+    posted = state.posted <> posted
+  }
+  
+  pure (state', actions)
+
+-- Run the agent forever
+runAgent : Config -> IO ()
+runAgent config = do
+  state <- loadState
+  forever $ do
+    (state', actions) <- step config state
+    traverse_ execute actions
+    saveState state'
+    sleep config.pollInterval
+
+-- ┌─────────────────────────────────────────────────────────────────────────┐
+-- │                         ACTIONS                                          │
+-- └─────────────────────────────────────────────────────────────────────────┘
+
+-- Side effects the agent can perform
+data Action where
+  PostTo      : Platform -> Post -> Action
+  LogEvent    : LogLevel -> String -> Action
+  SendWebhook : Url -> Json -> Action
+  UpdateState : (AgentState -> AgentState) -> Action
+
+data LogLevel = Debug | Info | Warn | Error
+
+-- Execute an action
+execute : Action -> IO ()
+execute (PostTo platform post) = case platform of
+  Twitter handle  -> twitterPost handle post
+  Bluesky handle  -> blueskyPost handle post
+  Discord s c     -> discordPost s c post
+  DevTo user      -> devtoPost user post
+  LinkedIn prof   -> linkedinPost prof post
+
+execute (LogEvent level msg) = 
+  putStrLn $ "[" <> show level <> "] " <> msg
+
+execute (SendWebhook url payload) = 
+  httpPost url payload
+
+-- ┌─────────────────────────────────────────────────────────────────────────┐
+-- │                    MENTION HANDLING                                      │
+-- └─────────────────────────────────────────────────────────────────────────┘
+
+-- When someone @mentions us, respond intelligently
+data Mention where
+  Mention : {
+    platform : Platform,
+    author   : String,
+    text     : String,
+    replyTo  : Maybe PostId
+  } -> Mention
+
+-- Classify what the mention is asking
+data Intent where
+  Question    : Topic -> Intent           -- "What is Phi?"
+  BugReport   : Description -> Intent     -- "X doesn't work"
+  FeatureReq  : Description -> Intent     -- "Can Phi do X?"
+  Praise      : Intent                    -- "This is awesome!"
+  Criticism   : Description -> Intent     -- "This sucks because..."
+  Spam        : Intent
+  Unknown     : Intent
+
+classifyIntent : String -> IO Intent
+classifyIntent text = do
+  response <- llm "claude-3-haiku" (classifyPrompt text)
+  pure (parseIntent response)
+
+-- Generate response based on intent
+respondToMention : Config -> Mention -> IO (Maybe Post)
+respondToMention config mention = do
+  intent <- classifyIntent mention.text
+  case intent of
+    Question topic -> Just <$> answerQuestion config topic
+    BugReport desc -> Just <$> acknowledgeBug desc
+    FeatureReq desc -> Just <$> considerFeature desc
+    Praise -> Just <$> thankUser mention.author
+    Criticism desc -> Just <$> addressCriticism desc
+    Spam -> pure Nothing
+    Unknown -> Just <$> defaultResponse
+
+-- ┌─────────────────────────────────────────────────────────────────────────┐
+-- │                    CONFIGURATION                                         │
+-- └─────────────────────────────────────────────────────────────────────────┘
+
+-- Default configuration
+defaultConfig : Config
+defaultConfig = Config {
+  repos = [
+    Repository "eurisko-info-lab" "phi",
+    Repository "eurisko-info-lab" "phi-autonomous"
+  ],
+  platforms = [
+    Twitter "@euriskophi",
+    Bluesky "@phispec.bsky.social",
+    Discord "phi-lang" "announcements"
+  ],
+  pollInterval = Minutes 5,
+  llmModel = "claude-sonnet-4-20250514",
+  personality = defaultPersonality
+}
+
+defaultPersonality : Personality
+defaultPersonality = Personality {
+  name = "Phi",
+  tone = Enthusiastic,
+  emoji = True,
+  hashtags = ["#ProgrammingLanguages", "#TypeTheory", "#Compilers"],
+  catchphrase = "Grammar IS implementation"
+}
+
+-- ┌─────────────────────────────────────────────────────────────────────────┐
+-- │                         ENTRY POINT                                      │
+-- └─────────────────────────────────────────────────────────────────────────┘
+
+-- The main function: run the autonomous agent
+main : IO ()
+main = do
+  putStrLn "Φ-AUTONOMOUS starting..."
+  putStrLn "Watching: phi, phi-autonomous"
+  putStrLn "Posting to: Twitter, Bluesky, Discord"
+  config <- loadConfig "config.json" `orElse` pure defaultConfig
+  runAgent config
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- This spec IS phi-autonomous.
+-- The Python implementation is just a compilation target.
+-- ═══════════════════════════════════════════════════════════════════════════
